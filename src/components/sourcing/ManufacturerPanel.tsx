@@ -1,10 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Building2, MapPin, User, Mail, Phone, Package, Factory, Store } from "lucide-react";
+import { Building2, MapPin, User, Mail, Phone, Package, Factory, Store, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
-interface ManufacturerResult {
+export interface ManufacturerResult {
+  id: string;
   name: string;
   type: "Factory" | "Trading Company";
   confidence: number;
@@ -16,11 +18,166 @@ interface ManufacturerResult {
 }
 
 interface ManufacturerPanelProps {
-  result: ManufacturerResult | null;
+  results: ManufacturerResult[];
 }
 
-export function ManufacturerPanel({ result }: ManufacturerPanelProps) {
-  if (!result) {
+function ManufacturerCard({ result, rank }: { result: ManufacturerResult; rank: number }) {
+  const [isExpanded, setIsExpanded] = useState(rank === 1);
+
+  const confidenceColor =
+    result.confidence >= 80
+      ? "text-success"
+      : result.confidence >= 60
+      ? "text-warning"
+      : "text-destructive";
+
+  const confidenceBg =
+    result.confidence >= 80
+      ? "bg-success/10"
+      : result.confidence >= 60
+      ? "bg-warning/10"
+      : "bg-destructive/10";
+
+  return (
+    <Card className={cn("bg-card border-border transition-all duration-200", isExpanded && "shadow-card")}>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full text-left"
+      >
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold",
+                  rank === 1 ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+                )}
+              >
+                #{rank}
+              </div>
+              <div
+                className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center",
+                  result.type === "Factory"
+                    ? "bg-success/20 text-success"
+                    : "bg-warning/20 text-warning"
+                )}
+              >
+                {result.type === "Factory" ? (
+                  <Factory className="w-5 h-5" />
+                ) : (
+                  <Store className="w-5 h-5" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-sm truncate">{result.name}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "text-xs",
+                      result.type === "Factory"
+                        ? "bg-success/20 text-success border-success/30"
+                        : "bg-warning/20 text-warning border-warning/30"
+                    )}
+                  >
+                    {result.type}
+                  </Badge>
+                  <span className={cn("text-sm font-bold", confidenceColor)}>
+                    {result.confidence}%
+                  </span>
+                </div>
+              </div>
+            </div>
+            {isExpanded ? (
+              <ChevronUp className="w-5 h-5 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-muted-foreground" />
+            )}
+          </div>
+        </CardHeader>
+      </button>
+
+      {isExpanded && (
+        <CardContent className="pt-0 space-y-4 animate-fade-in">
+          {/* Confidence Bar */}
+          <div className={cn("p-3 rounded-lg", confidenceBg)}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground">Confidence Score</span>
+              <span className={cn("font-bold", confidenceColor)}>
+                {result.confidence}%
+              </span>
+            </div>
+            <Progress value={result.confidence} className="h-2" />
+            <p className="text-xs text-muted-foreground mt-2">
+              {result.confidence >= 80
+                ? "High confidence - likely a direct manufacturer"
+                : result.confidence >= 60
+                ? "Medium confidence - may require verification"
+                : "Low confidence - additional verification recommended"}
+            </p>
+          </div>
+
+          {/* Contact Information */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Contact Information
+            </h4>
+            <div className="grid gap-3">
+              <div className="flex items-start gap-3">
+                <User className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium">{result.contact}</p>
+                  <p className="text-xs text-muted-foreground">Primary Contact</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Mail className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <a
+                    href={`mailto:${result.email}`}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    {result.email}
+                  </a>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Phone className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <p className="text-sm font-medium">{result.phone}</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <p className="text-sm">{result.address}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Products */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              Products
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {result.products.map((product) => (
+                <Badge key={product} variant="secondary" className="bg-secondary text-xs">
+                  {product}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+export function ManufacturerPanel({ results }: ManufacturerPanelProps) {
+  // Sort by confidence level (highest first)
+  const sortedResults = [...results].sort((a, b) => b.confidence - a.confidence);
+
+  if (results.length === 0) {
     return (
       <div className="h-full flex items-center justify-center p-8">
         <div className="text-center space-y-4">
@@ -38,134 +195,22 @@ export function ManufacturerPanel({ result }: ManufacturerPanelProps) {
     );
   }
 
-  const confidenceColor =
-    result.confidence >= 80
-      ? "text-success"
-      : result.confidence >= 60
-      ? "text-warning"
-      : "text-destructive";
-
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6 animate-slide-in-right">
-      {/* Header */}
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center",
-                result.type === "Factory"
-                  ? "bg-success/20 text-success"
-                  : "bg-warning/20 text-warning"
-              )}
-            >
-              {result.type === "Factory" ? (
-                <Factory className="w-6 h-6" />
-              ) : (
-                <Store className="w-6 h-6" />
-              )}
-            </div>
-            <div>
-              <h2 className="font-semibold text-lg">{result.name}</h2>
-              <Badge
-                variant="secondary"
-                className={cn(
-                  "mt-1",
-                  result.type === "Factory"
-                    ? "bg-success/20 text-success border-success/30"
-                    : "bg-warning/20 text-warning border-warning/30"
-                )}
-              >
-                {result.type}
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        {/* Confidence Score */}
-        <Card className="bg-card/50 border-border">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-muted-foreground">Confidence Score</span>
-              <span className={cn("font-bold text-xl", confidenceColor)}>
-                {result.confidence}%
-              </span>
-            </div>
-            <Progress
-              value={result.confidence}
-              className="h-2"
-            />
-            <p className="text-xs text-muted-foreground mt-2">
-              {result.confidence >= 80
-                ? "High confidence - likely a direct manufacturer"
-                : result.confidence >= 60
-                ? "Medium confidence - may require verification"
-                : "Low confidence - additional verification recommended"}
-            </p>
-          </CardContent>
-        </Card>
+    <div className="h-full overflow-y-auto p-4 space-y-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-medium text-muted-foreground">
+          {results.length} manufacturer{results.length !== 1 ? "s" : ""} found
+        </h3>
+        <Badge variant="secondary" className="text-xs">
+          Sorted by confidence
+        </Badge>
       </div>
-
-      {/* Contact Information */}
-      <Card className="bg-card border-border">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Contact Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-3">
-            <User className="w-5 h-5 text-muted-foreground mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">{result.contact}</p>
-              <p className="text-xs text-muted-foreground">Primary Contact</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <Mail className="w-5 h-5 text-muted-foreground mt-0.5" />
-            <div>
-              <a
-                href={`mailto:${result.email}`}
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                {result.email}
-              </a>
-              <p className="text-xs text-muted-foreground">Email</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <Phone className="w-5 h-5 text-muted-foreground mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">{result.phone}</p>
-              <p className="text-xs text-muted-foreground">Phone</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">{result.address}</p>
-              <p className="text-xs text-muted-foreground">Address</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Products */}
-      <Card className="bg-card border-border">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            Products
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {result.products.map((product) => (
-              <Badge key={product} variant="secondary" className="bg-secondary">
-                {product}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      
+      <div className="space-y-3">
+        {sortedResults.map((result, index) => (
+          <ManufacturerCard key={result.id} result={result} rank={index + 1} />
+        ))}
+      </div>
     </div>
   );
 }
