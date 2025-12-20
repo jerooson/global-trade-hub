@@ -1,12 +1,20 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import { RightSidebar } from "@/components/layout/RightSidebar";
+import { SourcingPage } from "@/components/sourcing/SourcingPage";
+import { PriceCalculator } from "@/components/calculator/PriceCalculator";
 
 const Index = () => {
+  const [activeTab, setActiveTab] = useState<"sourcing" | "calculator">("sourcing");
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background flex">
+      {/* Main Content */}
+      <main className="flex-1 mr-56 transition-all duration-300">
+        {activeTab === "sourcing" ? <SourcingPage /> : <PriceCalculator />}
+      </main>
+
+      {/* Right Sidebar */}
+      <RightSidebar activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );
 };
