@@ -21,7 +21,8 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
     {
       id: "1",
       role: "assistant",
-      content: "Welcome to TradeHub Sourcing! Upload a product image or describe what you're looking for, and I'll help you identify potential manufacturers sorted by confidence level.",
+      content:
+        "Ready to find your ideal manufacturers. Upload a product image or describe what you're sourcing.\n\nI'll identify potential suppliers, rank them by confidence, and help you take the next step — whether that's shortlisting, comparing, or proceeding to pricing.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -55,7 +56,6 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
     setUploadedImage(null);
     setIsLoading(true);
 
-    // Simulate API response with multiple manufacturers
     setTimeout(() => {
       const mockResults: ManufacturerResult[] = [
         {
@@ -74,7 +74,7 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
           name: "Guangzhou Global Trade Co., Ltd",
           type: "Trading Company",
           confidence: 78,
-          address: "Floor 12, International Trade Center, Tianhe District, Guangzhou 510620, China",
+          address: "Floor 12, International Trade Center, Tianhe District, Guangzhou, Guangdong 510620, China",
           contact: "Ms. Li Mei",
           email: "info@gzglobaltrade.com",
           phone: "+86 20 3888 7777",
@@ -115,10 +115,13 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
         },
       ];
 
+      const topMatch = mockResults.sort((a, b) => b.confidence - a.confidence)[0];
+      const factoryCount = mockResults.filter((r) => r.type === "Factory").length;
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `I found **${mockResults.length} potential manufacturers** matching your query.\n\nThe results are sorted by confidence score in the panel on the right. The top match is **${mockResults.sort((a, b) => b.confidence - a.confidence)[0].name}** with a **${mockResults.sort((a, b) => b.confidence - a.confidence)[0].confidence}%** confidence score.\n\nClick on each manufacturer card to view their contact details and product information.`,
+        content: `I've identified **${mockResults.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${mockResults.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -134,10 +137,7 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
         {messages.map((message) => (
           <div
             key={message.id}
-            className={cn(
-              "flex gap-3 animate-fade-in",
-              message.role === "user" ? "flex-row-reverse" : ""
-            )}
+            className={cn("flex gap-3 animate-fade-in", message.role === "user" ? "flex-row-reverse" : "")}
           >
             <div
               className={cn(
@@ -147,18 +147,12 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
                   : "bg-secondary text-secondary-foreground"
               )}
             >
-              {message.role === "user" ? (
-                <User className="w-4 h-4" />
-              ) : (
-                <Bot className="w-4 h-4" />
-              )}
+              {message.role === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
             </div>
             <div
               className={cn(
                 "max-w-[80%] rounded-xl p-4",
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card border border-border"
+                message.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border border-border"
               )}
             >
               {message.image && (
@@ -168,7 +162,19 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
                   className="rounded-lg mb-3 max-w-full h-auto max-h-48 object-cover"
                 />
               )}
-              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+              <div className="text-sm whitespace-pre-wrap prose prose-sm dark:prose-invert max-w-none">
+                {message.content.split("\n").map((line, i) => (
+                  <p key={i} className="mb-1 last:mb-0">
+                    {line.split(/(\*\*.*?\*\*)/).map((part, j) =>
+                      part.startsWith("**") && part.endsWith("**") ? (
+                        <strong key={j}>{part.slice(2, -2)}</strong>
+                      ) : (
+                        <span key={j}>{part}</span>
+                      )
+                    )}
+                  </p>
+                ))}
+              </div>
             </div>
           </div>
         ))}
@@ -180,9 +186,7 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">
-                  Searching manufacturers...
-                </span>
+                <span className="text-sm text-muted-foreground">Analyzing and matching manufacturers...</span>
               </div>
             </div>
           </div>
@@ -193,11 +197,7 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
       {uploadedImage && (
         <div className="px-4 pb-2">
           <div className="relative inline-block">
-            <img
-              src={uploadedImage}
-              alt="Preview"
-              className="h-20 w-20 object-cover rounded-lg border border-border"
-            />
+            <img src={uploadedImage} alt="Preview" className="h-20 w-20 object-cover rounded-lg border border-border" />
             <button
               onClick={() => setUploadedImage(null)}
               className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
@@ -218,11 +218,7 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
             accept="image/*"
             className="hidden"
           />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => fileInputRef.current?.click()}
-          >
+          <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
             <ImagePlus className="w-5 h-5" />
           </Button>
           <Input
