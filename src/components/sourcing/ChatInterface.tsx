@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, ImagePlus, Bot, User, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ManufacturerResult } from "./ManufacturerPanel";
 
 interface Message {
   id: string;
@@ -11,27 +12,16 @@ interface Message {
   image?: string;
 }
 
-interface ManufacturerResult {
-  name: string;
-  type: "Factory" | "Trading Company";
-  confidence: number;
-  address: string;
-  contact: string;
-  email: string;
-  phone: string;
-  products: string[];
-}
-
 interface ChatInterfaceProps {
-  onResult: (result: ManufacturerResult | null) => void;
+  onResults: (results: ManufacturerResult[]) => void;
 }
 
-export function ChatInterface({ onResult }: ChatInterfaceProps) {
+export function ChatInterface({ onResults }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
       role: "assistant",
-      content: "Welcome to TradeHub Sourcing! Upload a product image or describe what you're looking for, and I'll help you identify potential manufacturers.",
+      content: "Welcome to TradeHub Sourcing! Upload a product image or describe what you're looking for, and I'll help you identify potential manufacturers sorted by confidence level.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -65,27 +55,74 @@ export function ChatInterface({ onResult }: ChatInterfaceProps) {
     setUploadedImage(null);
     setIsLoading(true);
 
-    // Simulate API response
+    // Simulate API response with multiple manufacturers
     setTimeout(() => {
-      const mockResult: ManufacturerResult = {
-        name: "Shenzhen Precision Electronics Co., Ltd",
-        type: "Factory",
-        confidence: 87,
-        address: "Building 8, Technology Park, Nanshan District, Shenzhen, Guangdong 518000, China",
-        contact: "Mr. Zhang Wei",
-        email: "sales@szprecision.com",
-        phone: "+86 755 8888 9999",
-        products: ["Electronic Components", "PCB Assembly", "Custom Electronics"],
-      };
+      const mockResults: ManufacturerResult[] = [
+        {
+          id: "1",
+          name: "Shenzhen Precision Electronics Co., Ltd",
+          type: "Factory",
+          confidence: 92,
+          address: "Building 8, Technology Park, Nanshan District, Shenzhen, Guangdong 518000, China",
+          contact: "Mr. Zhang Wei",
+          email: "sales@szprecision.com",
+          phone: "+86 755 8888 9999",
+          products: ["Electronic Components", "PCB Assembly", "Custom Electronics"],
+        },
+        {
+          id: "2",
+          name: "Guangzhou Global Trade Co., Ltd",
+          type: "Trading Company",
+          confidence: 78,
+          address: "Floor 12, International Trade Center, Tianhe District, Guangzhou 510620, China",
+          contact: "Ms. Li Mei",
+          email: "info@gzglobaltrade.com",
+          phone: "+86 20 3888 7777",
+          products: ["Electronics", "Consumer Goods", "Industrial Parts"],
+        },
+        {
+          id: "3",
+          name: "Dongguan Smart Manufacturing Ltd",
+          type: "Factory",
+          confidence: 85,
+          address: "No. 88 Industrial Road, Changan Town, Dongguan, Guangdong 523850, China",
+          contact: "Mr. Chen Jun",
+          email: "business@dgsmart.cn",
+          phone: "+86 769 8123 4567",
+          products: ["Smart Devices", "IoT Components", "Wearables"],
+        },
+        {
+          id: "4",
+          name: "Ningbo Ocean Export Trading",
+          type: "Trading Company",
+          confidence: 65,
+          address: "Building C, Free Trade Zone, Beilun District, Ningbo, Zhejiang 315800, China",
+          contact: "Mr. Wang Tao",
+          email: "export@nbocean.com",
+          phone: "+86 574 8765 4321",
+          products: ["Mixed Electronics", "Hardware", "Plastic Components"],
+        },
+        {
+          id: "5",
+          name: "Foshan Quality Products Factory",
+          type: "Factory",
+          confidence: 71,
+          address: "Zone B, Shishan Industrial Park, Nanhai District, Foshan, Guangdong 528200, China",
+          contact: "Ms. Huang Ying",
+          email: "quality@fsproducts.com",
+          phone: "+86 757 8888 1234",
+          products: ["Metal Parts", "Precision Tools", "Industrial Equipment"],
+        },
+      ];
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `Based on my analysis, I found a matching manufacturer:\n\n**${mockResult.name}**\n\nThis appears to be a **${mockResult.type}** with **${mockResult.confidence}%** confidence.\n\nI've populated the detailed information in the results panel.`,
+        content: `I found **${mockResults.length} potential manufacturers** matching your query.\n\nThe results are sorted by confidence score in the panel on the right. The top match is **${mockResults.sort((a, b) => b.confidence - a.confidence)[0].name}** with a **${mockResults.sort((a, b) => b.confidence - a.confidence)[0].confidence}%** confidence score.\n\nClick on each manufacturer card to view their contact details and product information.`,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-      onResult(mockResult);
+      onResults(mockResults);
       setIsLoading(false);
     }, 2000);
   };
@@ -144,7 +181,7 @@ export function ChatInterface({ onResult }: ChatInterfaceProps) {
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
                 <span className="text-sm text-muted-foreground">
-                  Analyzing...
+                  Searching manufacturers...
                 </span>
               </div>
             </div>
