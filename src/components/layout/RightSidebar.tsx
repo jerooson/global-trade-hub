@@ -4,7 +4,7 @@ import { Search, Calculator, ChevronLeft, ChevronRight, Globe } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-interface RightSidebarProps {
+interface LeftSidebarProps {
   activeTab: "sourcing" | "calculator";
   onTabChange: (tab: "sourcing" | "calculator") => void;
 }
@@ -14,13 +14,13 @@ const menuItems = [
   { id: "calculator" as const, icon: Calculator, label: "Price Calculator" },
 ];
 
-export function RightSidebar({ activeTab, onTabChange }: RightSidebarProps) {
+export function LeftSidebar({ activeTab, onTabChange }: LeftSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <aside
       className={cn(
-        "fixed right-0 top-0 h-screen bg-sidebar border-l border-sidebar-border flex flex-col transition-all duration-300 z-50",
+        "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-300 z-50",
         isCollapsed ? "w-16" : "w-56"
       )}
     >
@@ -36,12 +36,12 @@ export function RightSidebar({ activeTab, onTabChange }: RightSidebarProps) {
           variant="ghost"
           size="icon"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="ml-auto"
+          className={cn(!isCollapsed && "ml-auto")}
         >
           {isCollapsed ? (
-            <ChevronLeft className="w-4 h-4" />
-          ) : (
             <ChevronRight className="w-4 h-4" />
+          ) : (
+            <ChevronLeft className="w-4 h-4" />
           )}
         </Button>
       </div>
@@ -68,7 +68,7 @@ export function RightSidebar({ activeTab, onTabChange }: RightSidebarProps) {
                     <Icon className="w-5 h-5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="left" className="bg-card border-border">
+                <TooltipContent side="right" className="bg-card border-border">
                   {item.label}
                 </TooltipContent>
               </Tooltip>
