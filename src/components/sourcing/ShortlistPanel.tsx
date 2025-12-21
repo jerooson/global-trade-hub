@@ -31,8 +31,8 @@ export function ShortlistPanel({ onNavigateToPricing }: ShortlistPanelProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+    <div className="h-full flex flex-col min-h-0">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
         {shortlist.map((manufacturer) => (
           <Card
             key={manufacturer.id}
@@ -87,8 +87,8 @@ export function ShortlistPanel({ onNavigateToPricing }: ShortlistPanelProps) {
         ))}
       </div>
 
-      {/* CTA Section */}
-      <div className="p-4 border-t border-border bg-card/50 space-y-3">
+      {/* CTA Section - Fixed at bottom */}
+      <div className="p-4 border-t border-border bg-card/50 space-y-3 flex-shrink-0">
         <p className="text-xs text-muted-foreground text-center">
           {selectedForPricing
             ? `Selected: ${selectedForPricing.name}`

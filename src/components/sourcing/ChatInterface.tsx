@@ -131,9 +131,9 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Messages - Scrollable area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -195,7 +195,7 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
 
       {/* Image Preview */}
       {uploadedImage && (
-        <div className="px-4 pb-2">
+        <div className="px-4 pb-2 flex-shrink-0">
           <div className="relative inline-block">
             <img src={uploadedImage} alt="Preview" className="h-20 w-20 object-cover rounded-lg border border-border" />
             <button
@@ -208,8 +208,8 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
         </div>
       )}
 
-      {/* Input */}
-      <div className="p-4 border-t border-border">
+      {/* Input - Fixed at bottom */}
+      <div className="p-4 border-t border-border flex-shrink-0">
         <div className="flex gap-2">
           <input
             type="file"

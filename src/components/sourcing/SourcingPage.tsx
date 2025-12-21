@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChatInterface } from "./ChatInterface";
 import { ManufacturerPanel, ManufacturerResult } from "./ManufacturerPanel";
@@ -23,22 +24,29 @@ export function SourcingPage({ onNavigateToPricing, onSelectForPricing }: Sourci
     onNavigateToPricing();
   };
 
+  // Show panel only when there are results or shortlist items
+  const showPanel = results.length > 0 || shortlist.length > 0;
+
   return (
     <div className="h-full flex">
       {/* Chat Interface */}
-      <div className="flex-1 flex flex-col border-r border-border">
-        <div className="h-14 px-6 flex items-center border-b border-border">
+      <div className={cn(
+        "flex flex-col h-full",
+        showPanel ? "flex-1 border-r border-border" : "w-full"
+      )}>
+        <div className="h-14 px-6 flex items-center border-b border-border flex-shrink-0">
           <h1 className="font-semibold">Product Sourcing</h1>
         </div>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden min-h-0">
           <ChatInterface onResults={setResults} />
         </div>
       </div>
 
-      {/* Results / Shortlist Panel */}
-      <div className="w-[420px] flex flex-col bg-card/30">
+      {/* Results / Shortlist Panel - Only show when there are results or shortlist items */}
+      {showPanel && (
+        <div className="w-[420px] flex flex-col bg-card/30 h-full">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "results" | "shortlist")} className="flex flex-col h-full">
-          <div className="h-14 px-4 flex items-center border-b border-border">
+          <div className="h-14 px-4 flex items-center border-b border-border flex-shrink-0">
             <TabsList className="grid grid-cols-2 w-full">
               <TabsTrigger value="results" className="flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
@@ -61,15 +69,16 @@ export function SourcingPage({ onNavigateToPricing, onSelectForPricing }: Sourci
             </TabsList>
           </div>
 
-          <TabsContent value="results" className="flex-1 overflow-hidden mt-0">
+          <TabsContent value="results" className="flex-1 overflow-hidden mt-0 min-h-0">
             <ManufacturerPanel results={results} onUseForPricing={handleUseForPricing} />
           </TabsContent>
 
-          <TabsContent value="shortlist" className="flex-1 overflow-hidden mt-0">
+          <TabsContent value="shortlist" className="flex-1 overflow-hidden mt-0 min-h-0">
             <ShortlistPanel onNavigateToPricing={onNavigateToPricing} />
           </TabsContent>
         </Tabs>
       </div>
+      )}
     </div>
   );
 }
