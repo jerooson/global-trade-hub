@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Calculator, 
   DollarSign, 
@@ -28,6 +29,7 @@ interface CostInput {
   quantity: number;
   cbm: number;
   rmbUnitPrice: number;
+  miscRmb: number;
   targetProfitRate: number;
   // Exchange & Tax
   usdRate: number;
@@ -47,6 +49,7 @@ interface CalculationResult {
   baseUsdCost: number;
   totalFreightRmb: number;
   freightCostPerUnitUsd: number;
+  miscCostPerUnitUsd: number;
   bankFeePerUnitUsd: number;
   finalUnitCostUsd: number;
   suggestedSellingPrice: number;
@@ -61,18 +64,16 @@ function calculateUnitCost(input: CostInput): CalculationResult {
   // Excel formula: (C9-C10)*(1+C11)
   // Where: C9=USD Rate, C10=Agent Fee (0.035), C11=Tax Refund Rate (13% = 0.13)
   // Formula: (USD Rate - Agent Fee) × (1 + Tax Refund Rate)
-  // Note: Agent Fee in Excel is 0.035 (decimal), in UI it's 3.5 (percentage), so divide by 100
-  const adjustedUsdToRmbRate = (input.usdRate - input.agentFeeRate / 100) * (1 + input.taxRefundRate / 100);
+  // Note: Agent Fee is entered directly as RMB amount (e.g., 0.035), not as percentage
+  const adjustedUsdToRmbRate = (input.usdRate - input.agentFeeRate) * (1 + input.taxRefundRate / 100);
 
-  // Step 2: Tax Refund (Cost Deduction) - Calculated for display
+  // Step 2: Tax Refund (Cost Deduction) - Calculated for display only
   const taxRefundRmb = input.rmbUnitPrice * (input.taxRefundRate / 100);
   const netRmbCost = input.rmbUnitPrice - taxRefundRmb;
 
   // Step 3: Base USD Cost (Before Logistics)
-  // Excel formula for final price: C5/C12*(1+C6)+C19+C23
-  // Where C5=RMB Price (full price, not net), C12=Adjusted Rate, C6=Profit Rate
-  // The Excel uses the full RMB price divided by adjusted rate, then applies profit
-  // Note: Tax refund may be accounted for in the adjusted rate calculation
+  // Base USD Cost = RMB Unit Price / Adjusted USD→RMB Rate
+  // Note: We use the full RMB unit price directly, not the net after tax refund
   const baseUsdCost = input.rmbUnitPrice / adjustedUsdToRmbRate;
 
   // Step 4: Total Freight Cost (RMB)
@@ -82,18 +83,23 @@ function calculateUnitCost(input: CostInput): CalculationResult {
   // Excel formula: (C17+C15)/C18/C3 = (FreightBase + CBM*FreightPerCBM) / FreightRate / Quantity
   const freightCostPerUnitUsd = (totalFreightRmb / input.quantity) / input.freightExchangeRate;
 
-  // Step 6: Bank Fee per Unit
+  // Step 6: Misc Cost per Unit (USD)
+  // Misc RMB amount divided by quantity, then converted to USD using adjusted rate
+  const miscCostPerUnitRmb = input.miscRmb / input.quantity;
+  const miscCostPerUnitUsd = miscCostPerUnitRmb / adjustedUsdToRmbRate;
+
+  // Step 7: Bank Fee per Unit
   // Excel formula: C22/C3 = BankFeeTotal / Quantity
   const bankFeePerUnitUsd = input.bankFeeTotalUsd / input.quantity;
 
-  // Step 7: Final Unit Cost (USD) - WITHOUT profit (for display)
-  const finalUnitCostUsd = baseUsdCost + freightCostPerUnitUsd + bankFeePerUnitUsd;
+  // Step 8: Final Unit Cost (USD) - WITHOUT profit (for display)
+  const finalUnitCostUsd = baseUsdCost + freightCostPerUnitUsd + miscCostPerUnitUsd + bankFeePerUnitUsd;
   
   // Excel final formula: C5/C12*(1+C6)+C19+C23
   // Where: C5=RMB Price, C12=Adjusted Rate, C6=Profit Rate, C19=Freight, C23=Bank Fee
   // This calculates the SELLING PRICE with profit included
-  // Formula: (RMB Price / Adjusted Rate) * (1 + Profit Rate) + Freight + Bank Fee
-  const suggestedSellingPrice = baseUsdCost * (1 + input.targetProfitRate / 100) + freightCostPerUnitUsd + bankFeePerUnitUsd;
+  // Formula: (RMB Price / Adjusted Rate) * (1 + Profit Rate) + Freight + Misc + Bank Fee
+  const suggestedSellingPrice = baseUsdCost * (1 + input.targetProfitRate / 100) + freightCostPerUnitUsd + miscCostPerUnitUsd + bankFeePerUnitUsd;
 
   return {
     adjustedUsdToRmbRate,
@@ -102,6 +108,7 @@ function calculateUnitCost(input: CostInput): CalculationResult {
     baseUsdCost,
     totalFreightRmb,
     freightCostPerUnitUsd,
+    miscCostPerUnitUsd,
     bankFeePerUnitUsd,
     finalUnitCostUsd,
     suggestedSellingPrice,
@@ -114,10 +121,11 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
     quantity: 1000,
     cbm: 5,
     rmbUnitPrice: 50,
+    miscRmb: 0,
     targetProfitRate: 30,
     // Exchange & Tax
     usdRate: 7.2,
-    agentFeeRate: 3.5,
+    agentFeeRate: 0.035,
     taxRefundRate: 13,
     // Freight & Bank
     freightBaseRmb: 500,
@@ -128,10 +136,20 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
 
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [agentFeeInput, setAgentFeeInput] = useState<string>("0.035");
+  const [reverseMode, setReverseMode] = useState(false);
+  const [targetSellingPrice, setTargetSellingPrice] = useState<number>(0);
 
   const handleChange = (field: keyof CostInput, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setFormData((prev) => ({ ...prev, [field]: numValue }));
+    if (value === "" || value === "-") {
+      // Allow empty string - don't set to 0 immediately, let user type
+      setFormData((prev) => ({ ...prev, [field]: 0 }));
+    } else {
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue)) {
+        setFormData((prev) => ({ ...prev, [field]: numValue }));
+      }
+    }
   };
 
   const handleCalculate = () => {
@@ -139,12 +157,46 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
 
     setTimeout(() => {
       try {
-        const calculationResult = calculateUnitCost(formData);
-        setResult(calculationResult);
-        toast({
-          title: "Calculation Complete",
-          description: `Final unit cost: $${calculationResult.finalUnitCostUsd.toFixed(2)}`,
-        });
+        let calculationResult = calculateUnitCost(formData);
+        
+        if (reverseMode && targetSellingPrice > 0) {
+          // Reverse calculation: Calculate required profit margin
+          // Formula: Target Price = Base Cost × (1 + Profit Rate) + Freight + Misc + Bank Fee
+          // Rearranging: Profit Rate = ((Target Price - Fees) / Base Cost) - 1
+          const baseCost = calculationResult.baseUsdCost;
+          const totalFees = calculationResult.freightCostPerUnitUsd + 
+                           calculationResult.miscCostPerUnitUsd + 
+                           calculationResult.bankFeePerUnitUsd;
+          
+          const availableForProfit = targetSellingPrice - totalFees;
+          
+          if (availableForProfit > 0 && baseCost > 0) {
+            const requiredProfitRate = ((availableForProfit / baseCost) - 1) * 100;
+            
+            // Update the target profit rate in form data
+            const updatedFormData = { ...formData, targetProfitRate: requiredProfitRate };
+            calculationResult = calculateUnitCost(updatedFormData);
+            setFormData(updatedFormData);
+            setResult(calculationResult);
+            
+            toast({
+              title: "Reverse Calculation Complete",
+              description: `Required profit margin: ${requiredProfitRate.toFixed(2)}%`,
+            });
+          } else {
+            toast({
+              title: "Invalid Target Price",
+              description: "Target price must be higher than total fees.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          setResult(calculationResult);
+          toast({
+            title: "Calculation Complete",
+            description: `Final unit cost: $${calculationResult.finalUnitCostUsd.toFixed(2)}`,
+          });
+        }
       } catch (error) {
         toast({
           title: "Calculation Error",
@@ -273,6 +325,20 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-0.5">
+                    <Label htmlFor="miscRmb" className="text-[11px]">Misc (RMB)</Label>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">¥</span>
+                      <Input
+                        id="miscRmb"
+                        type="number"
+                        placeholder="0"
+                        value={formData.miscRmb || ""}
+                        onChange={(e) => handleChange("miscRmb", e.target.value)}
+                        className="pl-7 h-8 text-xs bg-secondary border-border"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-0.5">
                     <div className="flex items-center gap-1">
                       <Label htmlFor="cbm" className="text-[11px]">CBM</Label>
                       <Tooltip delayDuration={0}>
@@ -336,14 +402,35 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                     />
                   </div>
                   <div className="space-y-0.5">
-                    <Label htmlFor="agentFeeRate" className="text-[11px]">Agent Fee (%)</Label>
+                    <Label htmlFor="agentFeeRate" className="text-[11px]">Agent Fee (RMB)</Label>
                     <Input
                       id="agentFeeRate"
                       type="number"
-                      step="0.1"
-                      placeholder="3.5"
-                      value={formData.agentFeeRate || ""}
-                      onChange={(e) => handleChange("agentFeeRate", e.target.value)}
+                      step="0.001"
+                      placeholder="0.035"
+                      value={agentFeeInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAgentFeeInput(val);
+                        if (val === "") {
+                          setFormData((prev) => ({ ...prev, agentFeeRate: 0 }));
+                        } else {
+                          const numValue = parseFloat(val);
+                          if (!isNaN(numValue)) {
+                            setFormData((prev) => ({ ...prev, agentFeeRate: numValue }));
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value === "") {
+                          setAgentFeeInput("");
+                        } else {
+                          const numValue = parseFloat(e.target.value);
+                          if (!isNaN(numValue)) {
+                            setAgentFeeInput(numValue.toString());
+                          }
+                        }
+                      }}
                       className="h-8 text-xs bg-secondary border-border"
                     />
                   </div>
@@ -412,7 +499,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                     />
                   </div>
                   <div className="space-y-0.5">
-                    <Label htmlFor="bankFeeTotalUsd" className="text-[11px]">Bank Fee Total (USD)</Label>
+                    <Label htmlFor="bankFeeTotalUsd" className="text-[11px]">Bank Fee and Labor Total (USD)</Label>
                     <div className="relative">
                       <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                       <Input
@@ -471,37 +558,21 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
                         <div className="text-muted-foreground mb-0.5 text-[10px]">Step 1: Adjusted USD→RMB Rate</div>
                         <div className="text-[9px] text-muted-foreground mb-0.5">
-                          ({formData.usdRate} - {formData.agentFeeRate}%) × (1 + {formData.taxRefundRate}%) = {(formData.usdRate - formData.agentFeeRate / 100).toFixed(4)} × {(1 + formData.taxRefundRate / 100).toFixed(4)}
+                          ({formData.usdRate} - {formData.agentFeeRate}) × (1 + {formData.taxRefundRate}%) = {(formData.usdRate - formData.agentFeeRate).toFixed(4)} × {(1 + formData.taxRefundRate / 100).toFixed(4)}
                         </div>
                         <div className="font-semibold text-primary text-xs">¥{result.adjustedUsdToRmbRate.toFixed(4)}</div>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
-                        <div className="text-muted-foreground mb-0.5 text-[10px]">Step 2: Tax Refund</div>
+                        <div className="text-muted-foreground mb-0.5 text-[10px]">Step 2: Base USD Cost</div>
                         <div className="text-[9px] text-muted-foreground mb-0.5">
-                          {formData.rmbUnitPrice} × {formData.taxRefundRate}%
-                        </div>
-                        <div className="font-semibold text-success text-xs">-¥{result.taxRefundRmb.toFixed(2)}</div>
-                      </div>
-
-                      <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
-                        <div className="text-muted-foreground mb-0.5 text-[10px]">Net RMB Cost</div>
-                        <div className="text-[9px] text-muted-foreground mb-0.5">
-                          {formData.rmbUnitPrice} - {result.taxRefundRmb.toFixed(2)}
-                        </div>
-                        <div className="font-semibold text-xs">¥{result.netRmbCost.toFixed(2)}</div>
-                      </div>
-
-                      <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
-                        <div className="text-muted-foreground mb-0.5 text-[10px]">Step 3: Base USD Cost</div>
-                        <div className="text-[9px] text-muted-foreground mb-0.5">
-                          {result.netRmbCost.toFixed(2)} ÷ {result.adjustedUsdToRmbRate.toFixed(4)}
+                          {formData.rmbUnitPrice} ÷ {result.adjustedUsdToRmbRate.toFixed(4)}
                         </div>
                         <div className="font-semibold text-xs">${result.baseUsdCost.toFixed(4)}</div>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
-                        <div className="text-muted-foreground mb-0.5 text-[10px]">Step 4: Total Freight (RMB)</div>
+                        <div className="text-muted-foreground mb-0.5 text-[10px]">Step 3: Total Freight (RMB)</div>
                         <div className="text-[9px] text-muted-foreground mb-0.5">
                           {formData.freightBaseRmb} + ({formData.cbm} × {formData.freightPerCbmRmb})
                         </div>
@@ -509,11 +580,19 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
-                        <div className="text-muted-foreground mb-0.5 text-[10px]">Step 5: Freight per Unit (USD)</div>
+                        <div className="text-muted-foreground mb-0.5 text-[10px]">Step 4: Freight per Unit (USD)</div>
                         <div className="text-[9px] text-muted-foreground mb-0.5">
                           ({result.totalFreightRmb.toFixed(2)} ÷ {formData.quantity}) ÷ {formData.freightExchangeRate}
                         </div>
                         <div className="font-semibold text-xs">${result.freightCostPerUnitUsd.toFixed(4)}</div>
+                      </div>
+
+                      <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
+                        <div className="text-muted-foreground mb-0.5 text-[10px]">Step 5: Misc per Unit (USD)</div>
+                        <div className="text-[9px] text-muted-foreground mb-0.5">
+                          ({formData.miscRmb} ÷ {formData.quantity}) ÷ {result.adjustedUsdToRmbRate.toFixed(4)}
+                        </div>
+                        <div className="font-semibold text-xs">${result.miscCostPerUnitUsd.toFixed(4)}</div>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
@@ -532,19 +611,97 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                       <div>
                         <div className="font-medium text-xs mb-0.5">Final Unit Cost (USD)</div>
                         <div className="text-[9px] text-muted-foreground">
-                          Base ${result.baseUsdCost.toFixed(4)} + Freight ${result.freightCostPerUnitUsd.toFixed(4)} + Bank ${result.bankFeePerUnitUsd.toFixed(4)}
+                          Base ${result.baseUsdCost.toFixed(4)} + Freight ${result.freightCostPerUnitUsd.toFixed(4)} + Misc ${result.miscCostPerUnitUsd.toFixed(4)} + Bank ${result.bankFeePerUnitUsd.toFixed(4)}
                         </div>
                       </div>
                       <span className="text-lg font-bold text-primary">${result.finalUnitCostUsd.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center p-2 rounded-lg bg-primary/10 border border-primary/30">
-                      <div>
+                      <div className="flex-1">
                         <div className="font-medium text-primary text-xs mb-0.5">Suggested Selling Price</div>
                         <div className="text-[9px] text-muted-foreground">
-                          Unit cost × (1 + {formData.targetProfitRate}% profit)
+                          Unit cost × (1 + {formData.targetProfitRate.toFixed(2)}% profit)
                         </div>
                       </div>
                       <span className="text-lg font-bold text-primary">${result.suggestedSellingPrice.toFixed(2)}</span>
+                    </div>
+                    
+                    {/* Reverse Calculation Section */}
+                    <div className="pt-2 border-t border-border">
+                      <div className="flex items-center gap-2 mb-2">
+                        <input
+                          type="checkbox"
+                          id="reverseMode"
+                          checked={reverseMode}
+                          onChange={(e) => setReverseMode(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded border-border"
+                        />
+                        <Label htmlFor="reverseMode" className="text-[10px] font-medium cursor-pointer">
+                          Reverse Calculate: Enter target price to find required profit margin
+                        </Label>
+                      </div>
+                      {reverseMode && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor="targetSellingPrice" className="text-[10px] whitespace-nowrap">
+                              Target Selling Price (USD):
+                            </Label>
+                            <Input
+                              id="targetSellingPrice"
+                              type="number"
+                              step="0.01"
+                              placeholder="2.10"
+                              value={targetSellingPrice || ""}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val) && val > 0) {
+                                  setTargetSellingPrice(val);
+                                } else if (e.target.value === "") {
+                                  setTargetSellingPrice(0);
+                                }
+                              }}
+                              className="h-7 text-xs flex-1"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={handleCalculate}
+                              disabled={isCalculating || targetSellingPrice <= 0}
+                              className="h-7 text-xs px-2"
+                            >
+                              Calculate
+                            </Button>
+                          </div>
+                          {reverseMode && targetSellingPrice > 0 && result && (() => {
+                            const totalFees = result.freightCostPerUnitUsd + result.miscCostPerUnitUsd + result.bankFeePerUnitUsd;
+                            const availableForProfit = targetSellingPrice - totalFees;
+                            const requiredProfitRate = availableForProfit > 0 && result.baseUsdCost > 0 
+                              ? ((availableForProfit / result.baseUsdCost) - 1) * 100 
+                              : null;
+                            
+                            return (
+                              <div className="p-2 rounded-lg bg-muted/50 border border-border">
+                                <div className="text-[10px] text-muted-foreground mb-1">
+                                  Required Profit Margin:
+                                </div>
+                                <div className="text-sm font-bold text-primary">
+                                  {requiredProfitRate !== null && requiredProfitRate > 0
+                                    ? `${requiredProfitRate.toFixed(2)}%`
+                                    : "Not feasible (below cost)"}
+                                </div>
+                                <div className="text-[9px] text-muted-foreground mt-1">
+                                  Formula: (${targetSellingPrice.toFixed(2)} - ${totalFees.toFixed(4)}) ÷ ${result.baseUsdCost.toFixed(4)} - 1
+                                </div>
+                                {requiredProfitRate !== null && requiredProfitRate > 0 && (
+                                  <div className="text-[9px] text-muted-foreground mt-1">
+                                    Target Profit field updated to {requiredProfitRate.toFixed(2)}%
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
                   </div>
 
