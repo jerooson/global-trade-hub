@@ -30,7 +30,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename="/global-trade-hub">
         <AppContent />
       </BrowserRouter>
     </TooltipProvider>
