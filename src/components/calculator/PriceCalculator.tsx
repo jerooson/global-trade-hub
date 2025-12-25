@@ -138,6 +138,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [agentFeeInput, setAgentFeeInput] = useState<string>("0.035");
+  const [targetProfitRateInput, setTargetProfitRateInput] = useState<string>("30");
   const [reverseMode, setReverseMode] = useState(false);
   const [targetSellingPrice, setTargetSellingPrice] = useState<number>(0);
 
@@ -372,9 +373,45 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                       <Input
                         id="targetProfitRate"
                         type="number"
+                        step="0.01"
                         placeholder="30"
-                        value={formData.targetProfitRate || ""}
-                        onChange={(e) => handleChange("targetProfitRate", e.target.value)}
+                        value={targetProfitRateInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          // Check if the value has more than 2 decimal places
+                          const decimalIndex = val.indexOf('.');
+                          if (decimalIndex !== -1) {
+                            const decimalPart = val.substring(decimalIndex + 1);
+                            if (decimalPart.length > 2) {
+                              // Don't allow more than 2 decimal places
+                              return;
+                            }
+                          }
+                          setTargetProfitRateInput(val);
+                          if (val === "") {
+                            setFormData((prev) => ({ ...prev, targetProfitRate: 0 }));
+                          } else {
+                            const numValue = parseFloat(val);
+                            if (!isNaN(numValue)) {
+                              setFormData((prev) => ({ ...prev, targetProfitRate: numValue }));
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === "") {
+                            setTargetProfitRateInput("0");
+                            setFormData((prev) => ({ ...prev, targetProfitRate: 0 }));
+                          } else {
+                            const numValue = parseFloat(e.target.value);
+                            if (!isNaN(numValue)) {
+                              // Format: if it's a whole number, keep it whole; otherwise format to max 2 decimals
+                              const formatted = numValue % 1 === 0 
+                                ? numValue.toString() 
+                                : parseFloat(numValue.toFixed(2)).toString();
+                              setTargetProfitRateInput(formatted);
+                            }
+                          }
+                        }}
                         className="pl-7 h-8 text-xs bg-secondary border-border"
                       />
                     </div>
