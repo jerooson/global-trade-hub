@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClipboardCheck, Clock, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const Workspace = () => {
   const { productId } = useParams();
@@ -118,14 +119,17 @@ const Workspace = () => {
                   {productState.selectedProduct.category || "Uncategorized"}
                 </Badge>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/")}
-                className="text-xs"
-              >
-                Change Product
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("/")}
+                  className="text-xs"
+                >
+                  Change Product
+                </Button>
+                <ThemeToggle />
+              </div>
             </div>
           )}
           {/* Content area - takes remaining height */}
