@@ -18,7 +18,8 @@ import {
   Factory,
   TrendingUp,
   ArrowRight,
-  Info
+  Info,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -152,14 +153,20 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
     }
   };
 
-  const handleCalculate = () => {
+  const handleCalculate = (isReverseCalculate = false) => {
     setIsCalculating(true);
+
+    // If this is the main calculate button (not reverse), uncheck reverse mode
+    if (!isReverseCalculate) {
+      setReverseMode(false);
+      setTargetSellingPrice(0);
+    }
 
     setTimeout(() => {
       try {
         let calculationResult = calculateUnitCost(formData);
         
-        if (reverseMode && targetSellingPrice > 0) {
+        if (isReverseCalculate && targetSellingPrice > 0) {
           // Reverse calculation: Calculate required profit margin
           // Formula: Target Price = Base Cost × (1 + Profit Rate) + Freight + Misc + Bank Fee
           // Rearranging: Profit Rate = ((Target Price - Fees) / Base Cost) - 1
@@ -173,16 +180,12 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
           if (availableForProfit > 0 && baseCost > 0) {
             const requiredProfitRate = ((availableForProfit / baseCost) - 1) * 100;
             
-            // Update the target profit rate in form data
-            const updatedFormData = { ...formData, targetProfitRate: requiredProfitRate };
-            calculationResult = calculateUnitCost(updatedFormData);
-            setFormData(updatedFormData);
+            // Don't update the target profit rate in form data - keep them separate
+            // Just recalculate with the current form data to show updated results
+            calculationResult = calculateUnitCost(formData);
             setResult(calculationResult);
             
-            toast({
-              title: "Reverse Calculation Complete",
-              description: `Required profit margin: ${requiredProfitRate.toFixed(2)}%`,
-            });
+            // Toast removed - spinner in results panel indicates calculation
           } else {
             toast({
               title: "Invalid Target Price",
@@ -192,10 +195,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
           }
         } else {
           setResult(calculationResult);
-          toast({
-            title: "Calculation Complete",
-            description: `Final unit cost: $${calculationResult.finalUnitCostUsd.toFixed(2)}`,
-          });
+          // Toast removed - spinner in results panel indicates calculation
         }
       } catch (error) {
         toast({
@@ -517,7 +517,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
               </div>
 
               <div className="flex-shrink-0 pt-3 border-t border-border mt-2">
-                <Button onClick={handleCalculate} className="w-full h-8 text-xs" size="default" disabled={isCalculating}>
+                <Button onClick={() => handleCalculate(false)} className="w-full h-8 text-xs" size="default" disabled={isCalculating}>
                   {isCalculating ? (
                     <>Calculating...</>
                   ) : (
@@ -534,7 +534,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
           {/* Results */}
           <Card
             className={cn(
-              "bg-card border-border transition-all duration-300 flex flex-col min-h-0",
+              "bg-card border-border transition-all duration-300 flex flex-col min-h-0 relative",
               result ? "opacity-100" : "opacity-50"
             )}
           >
@@ -544,7 +544,15 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                 Calculation Results
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 flex-1 overflow-y-auto min-h-0">
+            <CardContent className="px-4 pb-4 flex-1 overflow-y-auto min-h-0 relative">
+              {isCalculating && (
+                <div className="absolute inset-0 bg-card/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    <p className="text-xs text-muted-foreground">Calculating...</p>
+                  </div>
+                </div>
+              )}
               {result ? (
                 <div className="space-y-2.5 animate-fade-in">
                   {/* Step-by-Step Breakdown */}
@@ -665,7 +673,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={handleCalculate}
+                              onClick={() => handleCalculate(true)}
                               disabled={isCalculating || targetSellingPrice <= 0}
                               className="h-7 text-xs px-2"
                             >
@@ -682,7 +690,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                             return (
                               <div className="p-2 rounded-lg bg-muted/50 border border-border">
                                 <div className="text-[10px] text-muted-foreground mb-1">
-                                  Required Profit Margin:
+                                  Required Profit Margin (for ${targetSellingPrice.toFixed(2)}):
                                 </div>
                                 <div className="text-sm font-bold text-primary">
                                   {requiredProfitRate !== null && requiredProfitRate > 0
@@ -692,11 +700,9 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                                 <div className="text-[9px] text-muted-foreground mt-1">
                                   Formula: (${targetSellingPrice.toFixed(2)} - ${totalFees.toFixed(4)}) ÷ ${result.baseUsdCost.toFixed(4)} - 1
                                 </div>
-                                {requiredProfitRate !== null && requiredProfitRate > 0 && (
-                                  <div className="text-[9px] text-muted-foreground mt-1">
-                                    Target Profit field updated to {requiredProfitRate.toFixed(2)}%
-                                  </div>
-                                )}
+                                <div className="text-[9px] text-muted-foreground mt-1 italic">
+                                  Note: This shows the profit margin needed for your target price. The Target Profit field above remains unchanged.
+                                </div>
                               </div>
                             );
                           })()}
