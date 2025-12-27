@@ -18,7 +18,7 @@ export const config = {
   apifyApiKey: process.env.APIFY_API_KEY,
   
   // CORS Configuration
-  frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+  frontendUrl: process.env.FRONTEND_URL || "http://localhost:8080",
 } as const;
 
 // Validate required environment variables
