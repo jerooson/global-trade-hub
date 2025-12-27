@@ -96,7 +96,7 @@ export async function searchManufacturers(
         console.log("[DEBUG] Apify service initialized successfully, calling search1688...");
         const apifyResults = await apifyService.search1688(searchQuery, {
           location: searchLocation,
-          maxItems: 2,
+          maxItems: 20, // Increased to get more results for post-processing filtering
         });
         
         console.log(`Apify returned ${apifyResults.length} results`);
@@ -145,7 +145,7 @@ export async function searchManufacturers(
         const firecrawlService = getFirecrawlService();
         const scrapeResults = await firecrawlService.search1688(searchQuery, {
           location: searchLocation,
-          limit: 2,
+          limit: 20, // Increased to match Apify maxItems
         });
         console.log(`Firecrawl found ${scrapeResults.length} pages to process`);
         
@@ -212,18 +212,21 @@ export async function searchManufacturers(
       }
     }
 
-    // Step 4: Apply filters
+    // Step 4: Apply filters (use parsed location from query if available)
+    const filterLocation = request.filters?.location?.[0] || parsedQuery.location?.[0];
+    console.log(`[Filter] Applying filters - Location: ${filterLocation || "none"}, Results before filter: ${manufacturerResults.length}`);
     let filteredResults = filterManufacturers(manufacturerResults, {
       minConfidence: request.filters?.minConfidence,
-      location: request.filters?.location?.[0],
+      location: filterLocation, // Use parsed location from query
       manufacturerType: request.filters?.manufacturerType,
     });
+    console.log(`[Filter] Results after filter: ${filteredResults.length}`);
 
     // Step 5: Sort by confidence
     filteredResults = sortManufacturers(filteredResults, "confidence", "desc");
 
-    // Step 5: Limit results (top 2)
-    const limitedResults = filteredResults.slice(0, 2);
+    // Step 6: Limit results (top 10 for better variety)
+    const limitedResults = filteredResults.slice(0, 10);
 
     // Step 6: Build response
     const response: SourcingSearchResponse = {

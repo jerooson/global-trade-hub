@@ -19,6 +19,9 @@ import {
   GitCompare,
   Info,
   Check,
+  ExternalLink,
+  Building2,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManufacturerResult } from "./ManufacturerPanel";
@@ -62,11 +65,11 @@ export function ManufacturerCard({ result, rank, onUseForPricing }: Manufacturer
     <Card className={cn("bg-card border-border transition-all duration-200", isExpanded && "shadow-card")}>
       <div onClick={() => setIsExpanded(!isExpanded)} className="w-full text-left cursor-pointer">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               <div
                 className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold",
+                  "w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0",
                   rank === 1 ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
                 )}
               >
@@ -74,19 +77,26 @@ export function ManufacturerCard({ result, rank, onUseForPricing }: Manufacturer
               </div>
               <div
                 className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center",
+                  "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
                   result.type === "Factory" ? "bg-success/20 text-success" : "bg-warning/20 text-warning"
                 )}
               >
                 {result.type === "Factory" ? <Factory className="w-5 h-5" /> : <Store className="w-5 h-5" />}
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-sm truncate">{result.name}</h3>
-                <div className="flex items-center gap-2 mt-1">
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <h3 className="font-semibold text-sm truncate cursor-help">{result.name}</h3>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs bg-card border-border">
+                    <p className="text-xs">{result.name}</p>
+                  </TooltipContent>
+                </Tooltip>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <Badge
                     variant="secondary"
                     className={cn(
-                      "text-xs",
+                      "text-xs flex-shrink-0",
                       result.type === "Factory"
                         ? "bg-success/20 text-success border-success/30"
                         : "bg-warning/20 text-warning border-warning/30"
@@ -94,12 +104,12 @@ export function ManufacturerCard({ result, rank, onUseForPricing }: Manufacturer
                   >
                     {result.type}
                   </Badge>
-                  <span className={cn("text-sm font-bold", confidenceColor)}>{result.confidence}%</span>
+                  <span className={cn("text-sm font-bold flex-shrink-0", confidenceColor)}>{result.confidence}%</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
                         onClick={(e) => e.stopPropagation()}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
                       >
                         <Info className="w-3.5 h-3.5" />
                       </button>
@@ -111,11 +121,13 @@ export function ManufacturerCard({ result, rank, onUseForPricing }: Manufacturer
                 </div>
               </div>
             </div>
-            {isExpanded ? (
-              <ChevronUp className="w-5 h-5 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-muted-foreground" />
-            )}
+            <div className="flex-shrink-0">
+              {isExpanded ? (
+                <ChevronUp className="w-5 h-5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-muted-foreground" />
+              )}
+            </div>
           </div>
         </CardHeader>
       </div>
@@ -216,6 +228,54 @@ export function ManufacturerCard({ result, rank, onUseForPricing }: Manufacturer
               ))}
             </div>
           </div>
+
+          {/* External Links */}
+          {result.links && (result.links.productUrl || result.links.companyUrl || result.links.inquiryUrl) && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <ExternalLink className="w-4 h-4" />
+                Links
+              </h4>
+              <div className="flex flex-col gap-2">
+                {result.links.productUrl && (
+                  <a
+                    href={result.links.productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-primary hover:underline p-2 rounded-md hover:bg-secondary transition-colors"
+                  >
+                    <Package className="w-4 h-4" />
+                    <span>Product Page</span>
+                    <ExternalLink className="w-3 h-3 ml-auto" />
+                  </a>
+                )}
+                {result.links.companyUrl && (
+                  <a
+                    href={result.links.companyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-primary hover:underline p-2 rounded-md hover:bg-secondary transition-colors"
+                  >
+                    <Building2 className="w-4 h-4" />
+                    <span>Company Profile</span>
+                    <ExternalLink className="w-3 h-3 ml-auto" />
+                  </a>
+                )}
+                {result.links.inquiryUrl && (
+                  <a
+                    href={result.links.inquiryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-primary hover:underline p-2 rounded-md hover:bg-secondary transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Send Inquiry</span>
+                    <ExternalLink className="w-3 h-3 ml-auto" />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       )}
     </Card>

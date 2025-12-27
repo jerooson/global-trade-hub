@@ -13,6 +13,11 @@ export interface ManufacturerResult {
   email: string;
   phone: string;
   products: string[];
+  links?: {
+    productUrl?: string;
+    companyUrl?: string;
+    inquiryUrl?: string;
+  };
 }
 
 interface ManufacturerPanelProps {

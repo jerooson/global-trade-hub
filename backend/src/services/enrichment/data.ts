@@ -179,12 +179,18 @@ export function filterManufacturers(
     filtered = filtered.filter(m => m.type === targetType);
   }
 
-  // Filter by location (simple string matching for now)
+  // Filter by location (case-insensitive string matching)
   if (filters.location) {
-    const locationLower = filters.location.toLowerCase();
-    filtered = filtered.filter(m => 
-      m.address.toLowerCase().includes(locationLower)
-    );
+    const locationLower = filters.location.toLowerCase().trim();
+    // Check if location appears in address (handles variations like "Ningbo", "Ningbo City", etc.)
+    filtered = filtered.filter(m => {
+      const addressLower = m.address.toLowerCase();
+      // Match exact location name or common variations
+      return addressLower.includes(locationLower) || 
+             addressLower.includes(`${locationLower} city`) ||
+             addressLower.includes(`${locationLower},`) ||
+             addressLower.includes(`, ${locationLower}`);
+    });
   }
 
   return filtered;

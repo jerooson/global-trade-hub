@@ -47,6 +47,23 @@ export function transform1688ToManufacturerResult(
   // Extract products
   const products = data.productInfo?.mainProducts || data.products || [];
 
+  // Extract URLs from externalLinks
+  const productUrl = data.externalLinks?.url1688 || data.externalLinks?.alibabaUrl;
+  let companyUrl = data.externalLinks?.website || data.businessInfo?.website;
+  
+  // Fallback: Try to derive company URL from product URL (Made-in-China format)
+  // Made-in-China URLs: https://{company}.en.made-in-china.com/product/...
+  // Company URL: https://{company}.en.made-in-china.com
+  if (!companyUrl && productUrl) {
+    const madeInChinaMatch = productUrl.match(/^https?:\/\/([^\/]+)\.en\.made-in-china\.com/);
+    if (madeInChinaMatch) {
+      companyUrl = `https://${madeInChinaMatch[1]}.en.made-in-china.com`;
+    }
+  }
+  
+  // For Made-in-China, the product URL can also serve as inquiry URL
+  const inquiryUrl = data.externalLinks?.url1688;
+
   return {
     id: data.sellerId,
     name: data.companyName,
@@ -57,6 +74,11 @@ export function transform1688ToManufacturerResult(
     email,
     phone,
     products: products.length > 0 ? products : ["General Products"],
+    links: productUrl || companyUrl || inquiryUrl ? {
+      productUrl: productUrl || undefined,
+      companyUrl: companyUrl || undefined,
+      inquiryUrl: inquiryUrl || productUrl || undefined,
+    } : undefined,
   };
 }
 
@@ -363,16 +385,20 @@ export function transformApifyToManufacturerResult(
       priceRange: priceRange,
     } : undefined,
     externalLinks: {
+      // Product URL (product listing page)
       url1688: (apifyResult as any).productUrl  // parseforge format
-        || (apifyResult as any).supplierUrl  // parseforge company URL
         || (apifyResult as any).product_url  // agenscrape format
-        || (apifyResult as any).company_url
-        || (apifyResult as any).companyUrl
         || apifyResult.productUrl 
-        || apifyResult.companyUrl 
         || (apifyResult as any).url 
         || apifyResult.link
         || (apifyResult as any).productLink,
+      // Company/Supplier URL (company profile page)
+      website: (apifyResult as any).supplierUrl  // parseforge company URL
+        || (apifyResult as any).company_url  // agenscrape format
+        || (apifyResult as any).companyUrl
+        || apifyResult.companyUrl
+        || (apifyResult as any).supplier_url
+        || (apifyResult as any).companyProfileUrl,
     },
   };
 }
