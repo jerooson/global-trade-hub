@@ -1,0 +1,36 @@
+{
+  "name": "global-trade-hub-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Global Trade Hub - Sourcing Agent",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "@langchain/core": "^0.3.0",
+    "@langchain/openai": "^0.3.0",
+    "langchain": "^0.3.0",
+    "@mendable/firecrawl-js": "^1.0.0",
+    "apify-client": "^2.8.0",
+    "groq-sdk": "^0.7.0",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.7.5",
+    "@types/cors": "^2.8.17",
+    "tsx": "^4.7.1",
+    "typescript": "^5.6.2"
+  }
+}
+
