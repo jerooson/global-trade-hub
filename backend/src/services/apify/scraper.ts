@@ -61,8 +61,8 @@ class Apify1688Service {
           keyword: query,
           searchQuery: query, // Some actors use searchQuery instead
           query: query, // Some actors use query
-          maxItems: options?.maxItems || 10,
-          maxResults: options?.maxItems || 10, // Alternative parameter name
+          maxItems: options?.maxItems || 2,
+          maxResults: options?.maxItems || 2, // Alternative parameter name
         };
 
         // Add location filter if provided (Made in China accepts location names)

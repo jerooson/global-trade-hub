@@ -60,7 +60,7 @@ export function ManufacturerCard({ result, rank, onUseForPricing }: Manufacturer
 
   return (
     <Card className={cn("bg-card border-border transition-all duration-200", isExpanded && "shadow-card")}>
-      <button onClick={() => setIsExpanded(!isExpanded)} className="w-full text-left">
+      <div onClick={() => setIsExpanded(!isExpanded)} className="w-full text-left cursor-pointer">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -118,7 +118,7 @@ export function ManufacturerCard({ result, rank, onUseForPricing }: Manufacturer
             )}
           </div>
         </CardHeader>
-      </button>
+      </div>
 
       {isExpanded && (
         <CardContent className="pt-0 space-y-4 animate-fade-in">

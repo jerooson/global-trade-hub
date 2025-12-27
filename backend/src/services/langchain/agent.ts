@@ -1,5 +1,6 @@
+import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "@langchain/openai";
-import { AgentExecutor, createOpenAIFunctionsAgent } from "langchain/agents";
+import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { search1688Tool, classifyManufacturerTool, extractDetailsTool } from "./tools.js";
 import { ParsedQuery } from "../../models/manufacturer.js";
@@ -85,18 +86,32 @@ Only return the JSON, no other text.`;
  * Create LangChain agent for complex orchestration (optional - for future use)
  */
 export async function createSourcingAgent(): Promise<AgentExecutor | null> {
-  // Only create agent if OpenAI is available (LangChain agents work best with OpenAI)
-  if (!config.openaiApiKey) {
-    console.warn("OpenAI API key not found. LangChain agent will not be available.");
+  // Check for available API keys
+  if (!config.anthropicApiKey && !config.openaiApiKey) {
+    console.warn("No API key found for LangChain agent. Please set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
     return null;
   }
 
   try {
-    const llm = new ChatOpenAI({
-      modelName: "gpt-4o-mini",
-      temperature: 0.3,
-      openAIApiKey: config.openaiApiKey,
-    });
+    // Initialize LLM based on available API keys (prefer Anthropic)
+    let llm;
+    if (config.anthropicApiKey) {
+      llm = new ChatAnthropic({
+        modelName: "claude-3-5-sonnet-20241022",
+        temperature: 0.3,
+        anthropicApiKey: config.anthropicApiKey,
+      });
+      console.log("Using ChatAnthropic for LangChain agent");
+    } else if (config.openaiApiKey) {
+      llm = new ChatOpenAI({
+        modelName: "gpt-4o-mini",
+        temperature: 0.3,
+        openAIApiKey: config.openaiApiKey,
+      });
+      console.log("Using ChatOpenAI for LangChain agent");
+    } else {
+      return null;
+    }
 
     const tools = [search1688Tool, classifyManufacturerTool, extractDetailsTool];
 
@@ -112,7 +127,7 @@ Use these tools to help users find the best manufacturers for their needs.`],
       new MessagesPlaceholder("agent_scratchpad"),
     ]);
 
-    const agent = await createOpenAIFunctionsAgent({
+    const agent = await createToolCallingAgent({
       llm,
       tools,
       prompt,

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Send, ImagePlus, Bot, User, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManufacturerResult } from "./ManufacturerPanel";
+import { searchManufacturers } from "@/services/api";
 
 interface Message {
   id: string;
@@ -52,82 +53,91 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const query = input;
     setInput("");
     setUploadedImage(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const mockResults: ManufacturerResult[] = [
-        {
-          id: "1",
-          name: "Shenzhen Precision Electronics Co., Ltd",
-          type: "Factory",
-          confidence: 92,
-          address: "Building 8, Technology Park, Nanshan District, Shenzhen, Guangdong 518000, China",
-          contact: "Mr. Zhang Wei",
-          email: "sales@szprecision.com",
-          phone: "+86 755 8888 9999",
-          products: ["Electronic Components", "PCB Assembly", "Custom Electronics"],
-        },
-        {
-          id: "2",
-          name: "Guangzhou Global Trade Co., Ltd",
-          type: "Trading Company",
-          confidence: 78,
-          address: "Floor 12, International Trade Center, Tianhe District, Guangzhou, Guangdong 510620, China",
-          contact: "Ms. Li Mei",
-          email: "info@gzglobaltrade.com",
-          phone: "+86 20 3888 7777",
-          products: ["Electronics", "Consumer Goods", "Industrial Parts"],
-        },
-        {
-          id: "3",
-          name: "Dongguan Smart Manufacturing Ltd",
-          type: "Factory",
-          confidence: 85,
-          address: "No. 88 Industrial Road, Changan Town, Dongguan, Guangdong 523850, China",
-          contact: "Mr. Chen Jun",
-          email: "business@dgsmart.cn",
-          phone: "+86 769 8123 4567",
-          products: ["Smart Devices", "IoT Components", "Wearables"],
-        },
-        {
-          id: "4",
-          name: "Ningbo Ocean Export Trading",
-          type: "Trading Company",
-          confidence: 65,
-          address: "Building C, Free Trade Zone, Beilun District, Ningbo, Zhejiang 315800, China",
-          contact: "Mr. Wang Tao",
-          email: "export@nbocean.com",
-          phone: "+86 574 8765 4321",
-          products: ["Mixed Electronics", "Hardware", "Plastic Components"],
-        },
-        {
-          id: "5",
-          name: "Foshan Quality Products Factory",
-          type: "Factory",
-          confidence: 71,
-          address: "Zone B, Shishan Industrial Park, Nanhai District, Foshan, Guangdong 528200, China",
-          contact: "Ms. Huang Ying",
-          email: "quality@fsproducts.com",
-          phone: "+86 757 8888 1234",
-          products: ["Metal Parts", "Precision Tools", "Industrial Equipment"],
-        },
-      ];
+    let useTimeoutFallback = false;
 
-      const topMatch = mockResults.sort((a, b) => b.confidence - a.confidence)[0];
-      const factoryCount = mockResults.filter((r) => r.type === "Factory").length;
+    try {
+      // Call the backend API
+      const response = await searchManufacturers({
+        query,
+        imageUrl: uploadedImage || undefined,
+      });
+
+      const results = response.results;
+      const factoryCount = results.filter((r) => r.type === "Factory").length;
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `I've identified **${mockResults.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${mockResults.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+        content: `I've identified **${results.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${results.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-      onResults(mockResults);
-      setIsLoading(false);
-    }, 2000);
+      onResults(results);
+    } catch (error: any) {
+      console.error("Search error:", error);
+
+      // If API is not connected, use setTimeout to simulate response
+      if (error.message?.includes("fetch") || error.message?.includes("Network") || error.code === "ERR_NETWORK") {
+        console.log("API not connected, using mock data with setTimeout");
+        useTimeoutFallback = true;
+
+        setTimeout(() => {
+          const mockResults: ManufacturerResult[] = [
+            {
+              id: "1",
+              name: "Shenzhen Tech Manufacturing Co., Ltd",
+              type: "Factory" as const,
+              confidence: 95,
+              address: "Building 5, Industrial Park, Bao'an District, Shenzhen, Guangdong, China",
+              contact: "Zhang Wei",
+              email: "sales@shenzhentech.com",
+              phone: "+86 755 1234 5678",
+              products: ["LED Displays", "LED Lighting", "PCB Assembly", "Electronic Components"],
+            },
+            {
+              id: "2",
+              name: "Guangzhou Electronics Trading",
+              type: "Trading Company" as const,
+              confidence: 78,
+              address: "Room 1203, Trade Center, Tianhe District, Guangzhou, Guangdong, China",
+              contact: "Li Ming",
+              email: "info@gzelectronics.com",
+              phone: "+86 20 8765 4321",
+              products: ["Semiconductors", "Capacitors", "Resistors", "IC Chips"],
+            },
+          ];
+
+          const assistantMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: `I've identified **${mockResults.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. 1 factory and 1 trading company found.\n\n**Note:** API is not connected, showing mock data.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+          };
+
+          setMessages((prev) => [...prev, assistantMessage]);
+          onResults(mockResults);
+          setIsLoading(false);
+        }, 1500);
+      } else {
+        // For other errors, show error message
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: `Sorry, I encountered an error while searching: ${error.message}\n\nPlease try again or contact support if the issue persists.`,
+        };
+
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+    } finally {
+      // Only set loading to false if not using setTimeout fallback
+      if (!useTimeoutFallback) {
+        setIsLoading(false);
+      }
+    }
   };
 
   return (
