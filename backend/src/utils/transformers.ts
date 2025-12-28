@@ -61,8 +61,8 @@ export function transform1688ToManufacturerResult(
     }
   }
   
-  // For Made-in-China, the product URL can also serve as inquiry URL
-  const inquiryUrl = data.externalLinks?.url1688;
+  // Extract inquiry URL from externalLinks (Made-in-China format: https://www.made-in-china.com/sendInquiry/prod_...)
+  const inquiryUrl = data.externalLinks?.inquiryUrl;
 
   return {
     id: data.sellerId,
@@ -77,7 +77,7 @@ export function transform1688ToManufacturerResult(
     links: productUrl || companyUrl || inquiryUrl ? {
       productUrl: productUrl || undefined,
       companyUrl: companyUrl || undefined,
-      inquiryUrl: inquiryUrl || productUrl || undefined,
+      inquiryUrl: inquiryUrl || undefined,
     } : undefined,
   };
 }
@@ -399,6 +399,11 @@ export function transformApifyToManufacturerResult(
         || apifyResult.companyUrl
         || (apifyResult as any).supplier_url
         || (apifyResult as any).companyProfileUrl,
+      // Inquiry URL (Made-in-China format: https://www.made-in-china.com/sendInquiry/prod_...)
+      inquiryUrl: (apifyResult as any).inquiry_url  // agenscrape/parseforge format
+        || (apifyResult as any).inquiryUrl
+        || (apifyResult as any).inquiryLink
+        || (apifyResult as any).contactUrl,
     },
   };
 }

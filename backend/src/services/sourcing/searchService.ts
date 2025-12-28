@@ -96,7 +96,7 @@ export async function searchManufacturers(
         console.log("[DEBUG] Apify service initialized successfully, calling search1688...");
         const apifyResults = await apifyService.search1688(searchQuery, {
           location: searchLocation,
-          maxItems: 20, // Increased to get more results for post-processing filtering
+          maxItems: 10,
         });
         
         console.log(`Apify returned ${apifyResults.length} results`);
@@ -145,7 +145,7 @@ export async function searchManufacturers(
         const firecrawlService = getFirecrawlService();
         const scrapeResults = await firecrawlService.search1688(searchQuery, {
           location: searchLocation,
-          limit: 20, // Increased to match Apify maxItems
+          limit: 10, // Match Apify maxItems
         });
         console.log(`Firecrawl found ${scrapeResults.length} pages to process`);
         

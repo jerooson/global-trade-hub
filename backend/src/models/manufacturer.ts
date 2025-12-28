@@ -59,6 +59,7 @@ export interface Manufacturer1688Data {
     url1688?: string;
     alibabaUrl?: string;
     website?: string;
+    inquiryUrl?: string;
   };
   reviews?: {
     rating?: number;
