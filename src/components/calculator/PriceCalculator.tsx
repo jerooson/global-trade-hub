@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,37 +23,10 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { ManufacturerResult } from "@/components/sourcing/ManufacturerPanel";
+import { useCalculator, CostInput, CalculationResult } from "@/hooks/useCalculator";
 
-interface CostInput {
-  // Product & Order
-  quantity: number;
-  cbm: number;
-  rmbUnitPrice: number;
-  miscRmb: number;
-  targetProfitRate: number;
-  // Exchange & Tax
-  usdRate: number;
-  agentFeeRate: number;
-  taxRefundRate: number;
-  // Freight & Bank
-  freightBaseRmb: number;
-  freightPerCbmRmb: number;
-  freightExchangeRate: number;
-  bankFeeTotalUsd: number;
-}
-
-interface CalculationResult {
-  adjustedUsdToRmbRate: number;
-  taxRefundRmb: number;
-  netRmbCost: number;
-  baseUsdCost: number;
-  totalFreightRmb: number;
-  freightCostPerUnitUsd: number;
-  miscCostPerUnitUsd: number;
-  bankFeePerUnitUsd: number;
-  finalUnitCostUsd: number;
-  suggestedSellingPrice: number;
-}
+// Re-export types for backward compatibility
+export type { CostInput, CalculationResult };
 
 interface PriceCalculatorProps {
   selectedManufacturer: ManufacturerResult | null;
@@ -117,30 +89,24 @@ function calculateUnitCost(input: CostInput): CalculationResult {
 }
 
 export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) {
-  const [formData, setFormData] = useState<CostInput>({
-    // Product & Order
-    quantity: 1000,
-    cbm: 5,
-    rmbUnitPrice: 50,
-    miscRmb: 0,
-    targetProfitRate: 30,
-    // Exchange & Tax
-    usdRate: 7.2,
-    agentFeeRate: 0.035,
-    taxRefundRate: 13,
-    // Freight & Bank
-    freightBaseRmb: 500,
-    freightPerCbmRmb: 800,
-    freightExchangeRate: 7.0,
-    bankFeeTotalUsd: 150,
-  });
-
-  const [result, setResult] = useState<CalculationResult | null>(null);
-  const [isCalculating, setIsCalculating] = useState(false);
-  const [agentFeeInput, setAgentFeeInput] = useState<string>("0.035");
-  const [targetProfitRateInput, setTargetProfitRateInput] = useState<string>("30");
-  const [reverseMode, setReverseMode] = useState(false);
-  const [targetSellingPrice, setTargetSellingPrice] = useState<number>(0);
+  // Use context for persistent state
+  const {
+    formData,
+    setFormData,
+    updateFormField,
+    result,
+    setResult,
+    isCalculating,
+    setIsCalculating,
+    agentFeeInput,
+    setAgentFeeInput,
+    targetProfitRateInput,
+    setTargetProfitRateInput,
+    reverseMode,
+    setReverseMode,
+    targetSellingPrice,
+    setTargetSellingPrice,
+  } = useCalculator();
 
   const handleChange = (field: keyof CostInput, value: string) => {
     if (value === "" || value === "-") {

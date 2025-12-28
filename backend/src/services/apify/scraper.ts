@@ -46,6 +46,9 @@ class Apify1688Service {
       location?: string;
       maxItems?: number;
       page?: number;
+      category?: string;
+      subcategory?: string;
+      searchMode?: "keyword" | "category" | "url";
     }
   ): Promise<Apify1688Result[]> {
     // Try primary actor first, then alternatives
@@ -57,19 +60,58 @@ class Apify1688Service {
 
         // Prepare input for Apify actor (Made in China format)
         // Different actors may use different parameter names
+        
+        // Combine keyword with subcategory if both are provided
+        // Some actors work better when subcategory is part of the keyword
+        let combinedKeyword = query;
+        if (options?.subcategory && !query.toLowerCase().includes(options.subcategory.toLowerCase())) {
+          // Only add subcategory if it's not already in the query
+          combinedKeyword = `${query} ${options.subcategory}`;
+        }
+        
         const input: any = {
-          keyword: query,
-          searchQuery: query, // Some actors use searchQuery instead
-          query: query, // Some actors use query
+          keyword: combinedKeyword,
+          searchQuery: combinedKeyword, // Some actors use searchQuery instead
+          query: combinedKeyword, // Some actors use query
           maxItems: options?.maxItems || 2,
           maxResults: options?.maxItems || 2, // Alternative parameter name
         };
+
+        // Set search mode based on what parameters we have
+        // If we have category/subcategory, we might want to use category mode
+        // But if we have keyword, we use keyword mode (default)
+        if (options?.searchMode) {
+          input.searchMode = options.searchMode;
+        } else if (options?.category && !query) {
+          // If we have category but no keyword, use category mode
+          input.searchMode = "category";
+        } else {
+          // Default to keyword mode when keyword is provided
+          input.searchMode = "keyword";
+        }
+
+        // Add category if provided (works alongside keyword in some actors)
+        if (options?.category) {
+          input.category = options.category;
+        }
+
+        // Add subcategory if provided (some actors support this as separate parameter)
+        // Note: We also combined it with keyword above for better compatibility
+        if (options?.subcategory) {
+          input.subcategory = options.subcategory;
+        }
 
         // Add location filter if provided (Made in China accepts location names)
         if (options?.location) {
           input.location = options.location;
           input.city = options.location; // Some actors use 'city'
         }
+        
+        // Log what we're sending for debugging
+        console.log(`[Apify] Combined keyword: "${combinedKeyword}"`);
+        if (options?.category) console.log(`[Apify] Category: "${options.category}"`);
+        if (options?.subcategory) console.log(`[Apify] Subcategory: "${options.subcategory}"`);
+        if (options?.location) console.log(`[Apify] Location: "${options.location}"`);
 
         console.log(`[Apify] Calling actor ${actorId} with input:`, JSON.stringify(input, null, 2));
 

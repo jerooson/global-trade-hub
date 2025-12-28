@@ -67,7 +67,13 @@ import { config } from "../../config/env.js";
  * Main search service that orchestrates the entire sourcing flow
  */
 export async function searchManufacturers(
-  request: SourcingSearchRequest
+  request: SourcingSearchRequest,
+  options?: {
+    onProgress?: (progress: {
+      type: "parsed" | "result" | "complete" | "error";
+      data: any;
+    }) => void;
+  }
 ): Promise<SourcingSearchResponse> {
   const searchId = generateUUID();
   const startTime = Date.now();
@@ -76,6 +82,12 @@ export async function searchManufacturers(
     // Step 1: Parse the natural language query
     const parsedQuery = await parseQuery(request.query);
     console.log("Parsed query:", parsedQuery);
+    
+    // Stream parsed query if streaming is enabled
+    options?.onProgress?.({
+      type: "parsed",
+      data: parsedQuery,
+    });
 
     // Step 2: Search 1688.com using Apify (preferred) or Firecrawl (fallback)
     const searchLocation = request.filters?.location?.[0] || parsedQuery.location?.[0];
@@ -84,6 +96,8 @@ export async function searchManufacturers(
     console.log(`Searching Made in China/1688.com for: ${searchQuery}${searchLocation ? ` in ${searchLocation}` : ""}`);
     
     let manufacturerResults: ManufacturerResult[] = [];
+    let searchMethod: "apify" | "firecrawl" | "mock" = "mock";
+    let rawResultsCount = 0;
     
     // Try Apify first (if configured)
     // Check both process.env and config for API key
@@ -94,12 +108,25 @@ export async function searchManufacturers(
         console.log("[DEBUG] Attempting to use Apify service...");
         const apifyService = getApifyService();
         console.log("[DEBUG] Apify service initialized successfully, calling search1688...");
+        console.log(`[DEBUG] Search parameters - Query: "${searchQuery}", Location: "${searchLocation || 'none'}", Category: "${request.category || parsedQuery.category || 'none'}", Subcategory: "${request.subcategory || parsedQuery.subcategory || 'none'}"`);
         const apifyResults = await apifyService.search1688(searchQuery, {
           location: searchLocation,
           maxItems: 10,
+          category: request.category || parsedQuery.category,
+          subcategory: request.subcategory || parsedQuery.subcategory,
         });
         
-        console.log(`Apify returned ${apifyResults.length} results`);
+        console.log(`[DEBUG] Apify returned ${apifyResults.length} results`);
+        // Log first few results' locations for debugging
+        if (apifyResults.length > 0 && searchLocation) {
+          console.log(`[DEBUG] Sample locations from Apify results (checking if location filter worked):`);
+          apifyResults.slice(0, 3).forEach((result, idx) => {
+            const loc = (result as any).supplierLocation || (result as any).location || (result as any).company_location || (result as any).address || "unknown";
+            console.log(`  Result ${idx + 1}: ${loc}`);
+          });
+        }
+        rawResultsCount = apifyResults.length;
+        searchMethod = "apify";
         
         // Transform Apify results to ManufacturerResult format
         for (let i = 0; i < apifyResults.length; i++) {
@@ -129,6 +156,12 @@ export async function searchManufacturers(
             
             result.confidence = confidence;
             manufacturerResults.push(result);
+            
+            // Stream individual result if streaming is enabled
+            options?.onProgress?.({
+              type: "result",
+              data: result,
+            });
           } catch (error: any) {
             console.warn(`Error processing Apify result ${i}:`, error.message);
           }
@@ -148,6 +181,8 @@ export async function searchManufacturers(
           limit: 10, // Match Apify maxItems
         });
         console.log(`Firecrawl found ${scrapeResults.length} pages to process`);
+        rawResultsCount = scrapeResults.length;
+        searchMethod = "firecrawl";
         
         // Process Firecrawl results
         for (let i = 0; i < scrapeResults.length; i++) {
@@ -205,6 +240,12 @@ export async function searchManufacturers(
             
             result.confidence = confidence;
             manufacturerResults.push(result);
+            
+            // Stream individual result if streaming is enabled
+            options?.onProgress?.({
+              type: "result",
+              data: result,
+            });
           } catch (error: any) {
             console.warn(`Error processing mock result ${i}:`, error.message);
           }
@@ -212,7 +253,43 @@ export async function searchManufacturers(
       }
     }
 
-    // Step 4: Apply filters (use parsed location from query if available)
+    // Step 4: Deduplicate manufacturers by company name and URL
+    const seenCompanies = new Map<string, ManufacturerResult>();
+    for (const result of manufacturerResults) {
+      // Normalize company name: lowercase, trim, remove common suffixes variations
+      let normalizedName = result.name.toLowerCase().trim();
+      // Remove trailing periods, commas, and common company suffixes variations
+      normalizedName = normalizedName.replace(/[.,]+$/, "").trim();
+      // Normalize common company type suffixes
+      normalizedName = normalizedName.replace(/\s+(co\.?|ltd\.?|inc\.?|corp\.?|company|limited)\s*\.?$/i, "");
+      
+      const companyUrl = result.links?.companyUrl || "";
+      // Use company URL if available, otherwise use normalized name
+      const key = companyUrl ? `${normalizedName}|${companyUrl}` : normalizedName;
+      
+      // If we've seen this company before, keep the one with higher confidence
+      if (seenCompanies.has(key)) {
+        const existing = seenCompanies.get(key)!;
+        // Merge products from both entries
+        const allProducts = new Set([...existing.products, ...result.products]);
+        
+        // If new result has higher confidence, replace it but keep merged products
+        if (result.confidence > existing.confidence) {
+          const mergedResult = { ...result };
+          mergedResult.products = Array.from(allProducts);
+          seenCompanies.set(key, mergedResult);
+        } else {
+          // Keep existing but update products
+          existing.products = Array.from(allProducts);
+        }
+      } else {
+        seenCompanies.set(key, result);
+      }
+    }
+    manufacturerResults = Array.from(seenCompanies.values());
+    console.log(`[Deduplication] Results after deduplication: ${manufacturerResults.length}`);
+
+    // Step 5: Apply filters (use parsed location from query if available)
     const filterLocation = request.filters?.location?.[0] || parsedQuery.location?.[0];
     console.log(`[Filter] Applying filters - Location: ${filterLocation || "none"}, Results before filter: ${manufacturerResults.length}`);
     let filteredResults = filterManufacturers(manufacturerResults, {
@@ -222,13 +299,13 @@ export async function searchManufacturers(
     });
     console.log(`[Filter] Results after filter: ${filteredResults.length}`);
 
-    // Step 5: Sort by confidence
+    // Step 6: Sort by confidence
     filteredResults = sortManufacturers(filteredResults, "confidence", "desc");
 
-    // Step 6: Limit results (top 10 for better variety)
+    // Step 7: Limit results (top 10 for better variety)
     const limitedResults = filteredResults.slice(0, 10);
 
-    // Step 6: Build response
+    // Step 8: Build response with observability
     const response: SourcingSearchResponse = {
       searchId,
       query: request.query,
@@ -236,16 +313,47 @@ export async function searchManufacturers(
       results: limitedResults,
       totalResults: filteredResults.length,
       searchTime: 0, // Will be calculated by route handler
+      observability: {
+        searchMethod,
+        filtersApplied: {
+          location: filterLocation,
+          minConfidence: request.filters?.minConfidence,
+          manufacturerType: request.filters?.manufacturerType,
+        },
+        processingSteps: {
+          rawResultsCount,
+          afterDeduplicationCount: manufacturerResults.length,
+          afterFilteringCount: filteredResults.length,
+          finalCount: limitedResults.length,
+        },
+      },
     };
 
-    // Step 7: Cache results
+    // Step 9: Cache results
     cacheSearchResults(searchId, response);
 
     console.log(`Search completed: ${limitedResults.length} results found`);
 
+    // Stream completion if streaming is enabled
+    options?.onProgress?.({
+      type: "complete",
+      data: {
+        searchId,
+        totalResults: filteredResults.length,
+        observability: response.observability,
+      },
+    });
+
     return response;
   } catch (error: any) {
     console.error("Error in searchManufacturers:", error);
+    
+    // Stream error if streaming is enabled
+    options?.onProgress?.({
+      type: "error",
+      data: error.message,
+    });
+    
     throw new Error(`Search failed: ${error.message}`);
   }
 }

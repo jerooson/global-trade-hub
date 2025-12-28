@@ -83,6 +83,8 @@ export interface SourcingSearchRequest {
     manufacturerType?: "factory" | "trading" | "both";
   };
   imageUrl?: string;
+  category?: string;
+  subcategory?: string;
 }
 
 export interface ParsedQuery {
@@ -90,6 +92,8 @@ export interface ParsedQuery {
   location?: string[];
   type?: "manufacturer" | "product";
   specifications?: Record<string, string>;
+  category?: string;
+  subcategory?: string;
 }
 
 export interface SourcingSearchResponse {
@@ -99,6 +103,20 @@ export interface SourcingSearchResponse {
   results: ManufacturerResult[];
   totalResults: number;
   searchTime: number; // seconds
+  observability?: {
+    searchMethod?: "apify" | "firecrawl" | "mock";
+    filtersApplied?: {
+      location?: string;
+      minConfidence?: number;
+      manufacturerType?: "factory" | "trading" | "both";
+    };
+    processingSteps?: {
+      rawResultsCount?: number;
+      afterDeduplicationCount?: number;
+      afterFilteringCount?: number;
+      finalCount?: number;
+    };
+  };
 }
 
 export interface ClassificationRequest {

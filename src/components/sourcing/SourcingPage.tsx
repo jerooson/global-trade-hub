@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatInterface } from "./ChatInterface";
 import { ManufacturerPanel, ManufacturerResult } from "./ManufacturerPanel";
 import { ShortlistPanel } from "./ShortlistPanel";
-import { Building2, Star } from "lucide-react";
+import { Building2, Star, PanelRight, PanelRightClose } from "lucide-react";
 import { useShortlist } from "@/hooks/useShortlist";
+import { useChat } from "@/hooks/useChat";
 
 interface SourcingPageProps {
   onNavigateToPricing: () => void;
@@ -13,7 +16,8 @@ interface SourcingPageProps {
 }
 
 export function SourcingPage({ onNavigateToPricing, onSelectForPricing }: SourcingPageProps) {
-  const [results, setResults] = useState<ManufacturerResult[]>([]);
+  // Use context for persistent results and panel state
+  const { results, setResults, isPanelOpen, setIsPanelOpen } = useChat();
   const [activeTab, setActiveTab] = useState<"results" | "shortlist">("results");
   const { shortlist, addToShortlist, setSelectedForPricing } = useShortlist();
 
@@ -24,8 +28,9 @@ export function SourcingPage({ onNavigateToPricing, onSelectForPricing }: Sourci
     onNavigateToPricing();
   };
 
-  // Show panel only when there are results or shortlist items
-  const showPanel = results.length > 0 || shortlist.length > 0;
+  // Show panel when toggled open (and optionally when there are results/shortlist)
+  const hasResults = results.length > 0 || shortlist.length > 0;
+  const showPanel = isPanelOpen;
 
   return (
     <div className="h-full flex">
@@ -34,15 +39,34 @@ export function SourcingPage({ onNavigateToPricing, onSelectForPricing }: Sourci
         "flex flex-col h-full",
         showPanel ? "flex-1 border-r border-border" : "w-full"
       )}>
-        <div className="h-14 px-6 flex items-center border-b border-border flex-shrink-0">
+        <div className="h-14 px-6 flex items-center justify-between border-b border-border flex-shrink-0">
           <h1 className="font-semibold">Product Sourcing</h1>
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsPanelOpen(!isPanelOpen)}
+                className="h-8 w-8"
+              >
+                {isPanelOpen ? (
+                  <PanelRightClose className="w-4 h-4" />
+                ) : (
+                  <PanelRight className="w-4 h-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-card border-border">
+              {isPanelOpen ? "Hide results panel" : "Show results panel"}
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex-1 overflow-hidden min-h-0">
           <ChatInterface onResults={setResults} />
         </div>
       </div>
 
-      {/* Results / Shortlist Panel - Only show when there are results or shortlist items */}
+      {/* Results / Shortlist Panel - Show when toggled open */}
       {showPanel && (
         <div className="w-[420px] flex flex-col bg-card/30 h-full">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "results" | "shortlist")} className="flex flex-col h-full">

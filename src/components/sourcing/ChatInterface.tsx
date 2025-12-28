@@ -1,34 +1,33 @@
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, ImagePlus, Bot, User, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManufacturerResult } from "./ManufacturerPanel";
-import { searchManufacturers } from "@/services/api";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  image?: string;
-}
+import { searchManufacturers, SearchResponse } from "@/services/api";
+import { ObservabilityPanel } from "./ObservabilityPanel";
+import { useChat, ChatMessage } from "@/hooks/useChat";
 
 interface ChatInterfaceProps {
-  onResults: (results: ManufacturerResult[]) => void;
+  onResults?: (results: ManufacturerResult[]) => void; // Optional for backward compatibility
 }
 
 export function ChatInterface({ onResults }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content:
-        "Ready to find your ideal manufacturers. Upload a product image or describe what you're sourcing.\n\nI'll identify potential suppliers, rank them by confidence, and help you take the next step — whether that's shortlisting, comparing, or proceeding to pricing.",
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  // Use context for persistent state
+  const {
+    messages,
+    addMessage,
+    updateMessage,
+    input,
+    setInput,
+    uploadedImage,
+    setUploadedImage,
+    isLoading,
+    setIsLoading,
+    results,
+    setResults,
+  } = useChat();
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,14 +44,14 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
   const handleSend = async () => {
     if (!input.trim() && !uploadedImage) return;
 
-    const userMessage: Message = {
+    const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: "user",
       content: input || "Analyzing uploaded image...",
       image: uploadedImage || undefined,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    addMessage(userMessage);
     const query = input;
     setInput("");
     setUploadedImage(null);
@@ -61,23 +60,86 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
     let useTimeoutFallback = false;
 
     try {
-      // Call the backend API
-      const response = await searchManufacturers({
-        query,
-        imageUrl: uploadedImage || undefined,
-      });
-
-      const results = response.results;
-      const factoryCount = results.filter((r) => r.type === "Factory").length;
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
+      // Call the backend API with streaming
+      const streamingResults: ManufacturerResult[] = [];
+      let streamingParsedQuery: any = null;
+      let streamingObservability: any = null;
+      let messageId = (Date.now() + 1).toString();
+      
+      // Create initial loading message
+      const loadingMessage: ChatMessage = {
+        id: messageId,
         role: "assistant",
-        content: `I've identified **${results.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${results.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+        content: "Searching for manufacturers...",
       };
+      addMessage(loadingMessage);
 
-      setMessages((prev) => [...prev, assistantMessage]);
-      onResults(results);
+      const response = await searchManufacturers(
+        {
+          query,
+          imageUrl: uploadedImage || undefined,
+        },
+        {
+          onStream: (event) => {
+            if (event.type === "parsed") {
+              streamingParsedQuery = event.data;
+              // Update message with parsed query info
+              updateMessage(messageId, {
+                content: `Parsed your query: **${event.data.product}**${event.data.location ? ` in ${event.data.location.join(", ")}` : ""}${event.data.category ? ` (${event.data.category}${event.data.subcategory ? ` - ${event.data.subcategory}` : ""})` : ""}\n\nSearching manufacturers...`,
+                parsedQuery: event.data,
+              });
+            } else if (event.type === "result") {
+              streamingResults.push(event.data);
+              // Update results in real-time (both context and callback)
+              const currentResults = [...streamingResults];
+              setResults(currentResults);
+              onResults?.(currentResults);
+              // Update message with count
+              const factoryCount = streamingResults.filter((r) => r.type === "Factory").length;
+              updateMessage(messageId, {
+                content: `Found **${streamingResults.length} manufacturer${streamingResults.length !== 1 ? "s" : ""}** so far...\n\n${factoryCount} factor${factoryCount !== 1 ? "ies" : "y"} and ${streamingResults.length - factoryCount} trading compan${streamingResults.length - factoryCount !== 1 ? "ies" : "y"} found.`,
+                observability: streamingObservability,
+                parsedQuery: streamingParsedQuery,
+              });
+            } else if (event.type === "complete") {
+              streamingObservability = event.data.observability;
+              const finalResults = streamingResults;
+              const factoryCount = finalResults.filter((r) => r.type === "Factory").length;
+              
+              // Update final message
+              updateMessage(messageId, {
+                content: `I've identified **${finalResults.length} potential manufacturer${finalResults.length !== 1 ? "s" : ""}** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${finalResults.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+                observability: streamingObservability,
+                parsedQuery: streamingParsedQuery,
+              });
+              setResults(finalResults);
+              onResults?.(finalResults);
+            } else if (event.type === "error") {
+              updateMessage(messageId, {
+                content: `Error: ${event.data}`,
+              });
+            }
+          },
+        }
+      );
+
+      // If non-streaming response (fallback), handle normally
+      if (response && !streamingResults.length) {
+        const results = response.results;
+        const factoryCount = results.filter((r) => r.type === "Factory").length;
+
+        const assistantMessage: ChatMessage = {
+          id: messageId,
+          role: "assistant",
+          content: `I've identified **${results.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${results.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+          observability: response.observability,
+          parsedQuery: response.parsedQuery,
+        };
+
+        updateMessage(messageId, assistantMessage);
+        setResults(results);
+        onResults?.(results);
+      }
     } catch (error: any) {
       console.error("Search error:", error);
 
@@ -112,25 +174,26 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
             },
           ];
 
-          const assistantMessage: Message = {
+          const assistantMessage: ChatMessage = {
             id: (Date.now() + 1).toString(),
             role: "assistant",
             content: `I've identified **${mockResults.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. 1 factory and 1 trading company found.\n\n**Note:** API is not connected, showing mock data.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
           };
 
-          setMessages((prev) => [...prev, assistantMessage]);
-          onResults(mockResults);
+          addMessage(assistantMessage);
+          setResults(mockResults);
+          onResults?.(mockResults);
           setIsLoading(false);
         }, 1500);
       } else {
         // For other errors, show error message
-        const errorMessage: Message = {
+        const errorMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
           content: `Sorry, I encountered an error while searching: ${error.message}\n\nPlease try again or contact support if the issue persists.`,
         };
 
-        setMessages((prev) => [...prev, errorMessage]);
+        addMessage(errorMessage);
       }
     } finally {
       // Only set loading to false if not using setTimeout fallback
@@ -185,6 +248,16 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
                   </p>
                 ))}
               </div>
+              {message.role === "assistant" && (message.observability || message.parsedQuery) && (
+                <div className="mt-3">
+                  <ObservabilityPanel
+                    response={{
+                      parsedQuery: message.parsedQuery || { product: "" },
+                      observability: message.observability,
+                    } as SearchResponse}
+                  />
+                </div>
+              )}
             </div>
           </div>
         ))}

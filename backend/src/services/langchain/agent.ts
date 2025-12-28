@@ -22,6 +22,13 @@ Extract:
 2. Location preferences (cities or provinces in China)
 3. Query type (manufacturer search or product search)
 4. Any specifications or requirements
+5. Product category (ONLY if explicitly mentioned in the query, e.g., "Lighting", "Electronics", "Textiles")
+6. Subcategory (ONLY if explicitly mentioned in the query, e.g., "solar power", "LED strips", "wireless")
+
+IMPORTANT RULES:
+- Do NOT infer or guess category/subcategory - only extract if the user explicitly mentioned it
+- If the query is just "LED" without mentioning "Lighting" or "solar power", do NOT set category or subcategory
+- Only extract what is explicitly stated in the query, not what you think it might be
 
 Return a JSON object with this structure:
 {
@@ -30,7 +37,9 @@ Return a JSON object with this structure:
   "type": "manufacturer" or "product",
   "specifications": {
     "key": "value pairs of any specifications mentioned"
-  }
+  },
+  "category": "product category ONLY if explicitly mentioned (optional, can be null)",
+  "subcategory": "subcategory ONLY if explicitly mentioned (optional, can be null)"
 }
 
 Only return the JSON, no other text.`;
@@ -68,6 +77,8 @@ Only return the JSON, no other text.`;
       location: parsed.location || [],
       type: parsed.type || "manufacturer",
       specifications: parsed.specifications || {},
+      category: parsed.category,
+      subcategory: parsed.subcategory,
     };
   } catch (error: any) {
     console.error("Error parsing query:", error);
@@ -78,6 +89,8 @@ Only return the JSON, no other text.`;
       location: [],
       type: "manufacturer",
       specifications: {},
+      category: undefined,
+      subcategory: undefined,
     };
   }
 }

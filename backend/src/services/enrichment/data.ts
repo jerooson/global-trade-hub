@@ -179,18 +179,66 @@ export function filterManufacturers(
     filtered = filtered.filter(m => m.type === targetType);
   }
 
-  // Filter by location (case-insensitive string matching)
+  // Filter by location (strict matching to avoid false positives)
   if (filters.location) {
     const locationLower = filters.location.toLowerCase().trim();
-    // Check if location appears in address (handles variations like "Ningbo", "Ningbo City", etc.)
+    
+    // Map of common location variations and their canonical names
+    const locationMap: Record<string, string[]> = {
+      "ningbo": ["ningbo", "ningbo city", "ningbo,", ", ningbo", "ningbo, zhejiang", "zhejiang, ningbo"],
+      "shenzhen": ["shenzhen", "shenzhen city", "shenzhen,", ", shenzhen", "shenzhen, guangdong", "guangdong, shenzhen"],
+      "shanghai": ["shanghai", "shanghai city", "shanghai,", ", shanghai"],
+      "beijing": ["beijing", "beijing city", "beijing,", ", beijing"],
+      "guangzhou": ["guangzhou", "guangzhou city", "guangzhou,", ", guangzhou", "guangzhou, guangdong", "guangdong, guangzhou"],
+      "hangzhou": ["hangzhou", "hangzhou city", "hangzhou,", ", hangzhou", "hangzhou, zhejiang", "zhejiang, hangzhou"],
+      "dongguan": ["dongguan", "dongguan city", "dongguan,", ", dongguan", "dongguan, guangdong", "guangdong, dongguan"],
+      "suzhou": ["suzhou", "suzhou city", "suzhou,", ", suzhou"],
+      "wenzhou": ["wenzhou", "wenzhou city", "wenzhou,", ", wenzhou", "wenzhou, zhejiang", "zhejiang, wenzhou"],
+    };
+    
+    // Get all variations for the requested location
+    const locationVariations = locationMap[locationLower] || [locationLower];
+    
+    // Also check for province-level matches (e.g., "Zhejiang" should match "Ningbo, Zhejiang")
+    const provinceMap: Record<string, string[]> = {
+      "zhejiang": ["ningbo", "hangzhou", "wenzhou", "jiaxing", "huzhou", "shaoxing", "jinhua", "quzhou", "zhoushan", "taizhou", "lishui"],
+      "guangdong": ["shenzhen", "guangzhou", "dongguan", "foshan", "zhongshan", "jiangmen", "zhuhai", "huizhou"],
+      "jiangsu": ["suzhou", "nanjing", "wuxi", "changzhou", "xuzhou", "nantong"],
+      "shandong": ["jinan", "qingdao", "zibo", "zaozhuang", "dongying", "yantai"],
+    };
+    
     filtered = filtered.filter(m => {
       const addressLower = m.address.toLowerCase();
-      // Match exact location name or common variations
-      return addressLower.includes(locationLower) || 
-             addressLower.includes(`${locationLower} city`) ||
-             addressLower.includes(`${locationLower},`) ||
-             addressLower.includes(`, ${locationLower}`);
+      
+      // First, check for exact city matches (strict)
+      for (const variation of locationVariations) {
+        // Use word boundaries to avoid partial matches
+        // Match: "Ningbo, Zhejiang" or "Ningbo City" or ", Ningbo" or "Ningbo,"
+        // Don't match: "NingboXXX" (unless it's a known variation)
+        const pattern = new RegExp(`\\b${variation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (pattern.test(addressLower)) {
+          return true;
+        }
+      }
+      
+      // If no direct match, check if it's a province-level search
+      // (e.g., searching "Zhejiang" should match "Ningbo, Zhejiang")
+      for (const [province, cities] of Object.entries(provinceMap)) {
+        if (locationLower === province.toLowerCase()) {
+          // Check if address contains any city from this province
+          for (const city of cities) {
+            const cityPattern = new RegExp(`\\b${city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+            if (cityPattern.test(addressLower)) {
+              return true;
+            }
+          }
+        }
+      }
+      
+      return false;
     });
+    
+    console.log(`[Location Filter] Filtered ${filtered.length} results for location: "${filters.location}" (from ${manufacturers.length} total)`);
   }
 
   return filtered;

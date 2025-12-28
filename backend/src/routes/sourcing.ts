@@ -36,15 +36,58 @@ const classifyRequestSchema = z.object({
 router.post("/search", async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const validated = searchRequestSchema.parse(req.body);
+    const stream = req.query.stream === "true" || req.headers.accept?.includes("text/event-stream");
     
-    const startTime = Date.now();
-    const result = await searchManufacturers(validated);
-    const searchTime = (Date.now() - startTime) / 1000;
-    
-    res.json({
-      ...result,
-      searchTime: parseFloat(searchTime.toFixed(2)),
-    });
+    if (stream) {
+      // Streaming response using Server-Sent Events
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+      
+      const startTime = Date.now();
+      let searchId: string | undefined;
+      let parsedQuery: any;
+      let observability: any;
+      
+      // Stream search results as they're processed
+      await searchManufacturers(validated, {
+        onProgress: (progress) => {
+          if (progress.type === "parsed") {
+            parsedQuery = progress.data;
+            res.write(`event: parsed\n`);
+            res.write(`data: ${JSON.stringify({ parsedQuery: progress.data })}\n\n`);
+          } else if (progress.type === "result") {
+            res.write(`event: result\n`);
+            res.write(`data: ${JSON.stringify({ result: progress.data })}\n\n`);
+          } else if (progress.type === "complete") {
+            const searchTime = (Date.now() - startTime) / 1000;
+            res.write(`event: complete\n`);
+            res.write(`data: ${JSON.stringify({
+              searchId: progress.data.searchId,
+              totalResults: progress.data.totalResults,
+              searchTime: parseFloat(searchTime.toFixed(2)),
+              observability: progress.data.observability,
+            })}\n\n`);
+            res.end();
+          } else if (progress.type === "error") {
+            res.write(`event: error\n`);
+            res.write(`data: ${JSON.stringify({ error: progress.data })}\n\n`);
+            res.end();
+          }
+        },
+      });
+    } else {
+      // Non-streaming response (original behavior)
+      const startTime = Date.now();
+      const result = await searchManufacturers(validated);
+      const searchTime = (Date.now() - startTime) / 1000;
+      
+      res.json({
+        ...result,
+        searchTime: parseFloat(searchTime.toFixed(2)),
+      });
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({
