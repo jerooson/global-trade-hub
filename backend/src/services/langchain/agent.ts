@@ -140,12 +140,15 @@ Use these tools to help users find the best manufacturers for their needs.`],
       new MessagesPlaceholder("agent_scratchpad"),
     ]);
 
+    // TypeScript has issues with LangChain's complex types, so we use type assertions
+    // @ts-expect-error - LangChain types are too complex for TypeScript to infer
     const agent = await createToolCallingAgent({
       llm,
       tools,
       prompt,
     });
 
+    // @ts-expect-error - LangChain types are too complex for TypeScript to infer
     return new AgentExecutor({
       agent,
       tools,

@@ -7,6 +7,7 @@ import { extractManufacturerDataFromScrape } from "../../utils/transformers.js";
 /**
  * Tool: Search 1688.com for manufacturers
  */
+// @ts-expect-error - LangChain types are too complex for TypeScript to infer
 export const search1688Tool = new DynamicStructuredTool({
   name: "search_1688",
   description: "Search 1688.com (Chinese B2B marketplace) for manufacturers and suppliers based on product keywords and location",
@@ -44,6 +45,7 @@ export const search1688Tool = new DynamicStructuredTool({
 /**
  * Tool: Classify manufacturer type
  */
+// @ts-expect-error - LangChain types are too complex for TypeScript to infer
 export const classifyManufacturerTool = new DynamicStructuredTool({
   name: "classify_manufacturer",
   description: "Classify a 1688.com seller as a Factory or Trading Company based on their business information",
@@ -90,6 +92,7 @@ export const classifyManufacturerTool = new DynamicStructuredTool({
 /**
  * Tool: Extract detailed manufacturer information from scraped page
  */
+// @ts-expect-error - LangChain types are too complex for TypeScript to infer
 export const extractDetailsTool = new DynamicStructuredTool({
   name: "extract_details",
   description: "Extract detailed manufacturer information from a scraped 1688.com page",
