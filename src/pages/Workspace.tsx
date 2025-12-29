@@ -6,6 +6,8 @@ import { SourcingPage } from "@/components/sourcing/SourcingPage";
 import { PriceCalculator } from "@/components/calculator/PriceCalculator";
 import { ShortlistContext, useShortlistProvider } from "@/hooks/useShortlist";
 import { ProductContext, useProductProvider } from "@/hooks/useProduct";
+import { CalculatorContext, useCalculatorProvider } from "@/hooks/useCalculator";
+import { ChatContext, useChatProvider } from "@/hooks/useChat";
 import { ManufacturerResult } from "@/components/sourcing/ManufacturerPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClipboardCheck, Clock, Package } from "lucide-react";
@@ -20,6 +22,8 @@ const Workspace = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const shortlistState = useShortlistProvider();
   const productState = useProductProvider();
+  const calculatorState = useCalculatorProvider();
+  const chatState = useChatProvider();
   const [selectedManufacturer, setSelectedManufacturer] = useState<ManufacturerResult | null>(null);
 
   // Set product from URL parameter if available
@@ -95,7 +99,9 @@ const Workspace = () => {
 
   return (
     <ShortlistContext.Provider value={shortlistState}>
-      <div className="h-screen bg-background flex overflow-hidden">
+      <CalculatorContext.Provider value={calculatorState}>
+        <ChatContext.Provider value={chatState}>
+          <div className="h-screen bg-background flex overflow-hidden">
         <LeftSidebar 
           activeTab={activeTab} 
           onTabChange={setActiveTab}
@@ -138,6 +144,8 @@ const Workspace = () => {
           </div>
         </main>
       </div>
+        </ChatContext.Provider>
+      </CalculatorContext.Provider>
     </ShortlistContext.Provider>
   );
 };

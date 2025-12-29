@@ -1,33 +1,33 @@
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, ImagePlus, Bot, User, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManufacturerResult } from "./ManufacturerPanel";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  image?: string;
-}
+import { searchManufacturers, SearchResponse } from "@/services/api";
+import { ObservabilityPanel } from "./ObservabilityPanel";
+import { useChat, ChatMessage } from "@/hooks/useChat";
 
 interface ChatInterfaceProps {
-  onResults: (results: ManufacturerResult[]) => void;
+  onResults?: (results: ManufacturerResult[]) => void; // Optional for backward compatibility
 }
 
 export function ChatInterface({ onResults }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content:
-        "Ready to find your ideal manufacturers. Upload a product image or describe what you're sourcing.\n\nI'll identify potential suppliers, rank them by confidence, and help you take the next step — whether that's shortlisting, comparing, or proceeding to pricing.",
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  // Use context for persistent state
+  const {
+    messages,
+    addMessage,
+    updateMessage,
+    input,
+    setInput,
+    uploadedImage,
+    setUploadedImage,
+    isLoading,
+    setIsLoading,
+    results,
+    setResults,
+  } = useChat();
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,90 +44,163 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
   const handleSend = async () => {
     if (!input.trim() && !uploadedImage) return;
 
-    const userMessage: Message = {
+    const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: "user",
       content: input || "Analyzing uploaded image...",
       image: uploadedImage || undefined,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    addMessage(userMessage);
+    const query = input;
     setInput("");
     setUploadedImage(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const mockResults: ManufacturerResult[] = [
-        {
-          id: "1",
-          name: "Shenzhen Precision Electronics Co., Ltd",
-          type: "Factory",
-          confidence: 92,
-          address: "Building 8, Technology Park, Nanshan District, Shenzhen, Guangdong 518000, China",
-          contact: "Mr. Zhang Wei",
-          email: "sales@szprecision.com",
-          phone: "+86 755 8888 9999",
-          products: ["Electronic Components", "PCB Assembly", "Custom Electronics"],
-        },
-        {
-          id: "2",
-          name: "Guangzhou Global Trade Co., Ltd",
-          type: "Trading Company",
-          confidence: 78,
-          address: "Floor 12, International Trade Center, Tianhe District, Guangzhou, Guangdong 510620, China",
-          contact: "Ms. Li Mei",
-          email: "info@gzglobaltrade.com",
-          phone: "+86 20 3888 7777",
-          products: ["Electronics", "Consumer Goods", "Industrial Parts"],
-        },
-        {
-          id: "3",
-          name: "Dongguan Smart Manufacturing Ltd",
-          type: "Factory",
-          confidence: 85,
-          address: "No. 88 Industrial Road, Changan Town, Dongguan, Guangdong 523850, China",
-          contact: "Mr. Chen Jun",
-          email: "business@dgsmart.cn",
-          phone: "+86 769 8123 4567",
-          products: ["Smart Devices", "IoT Components", "Wearables"],
-        },
-        {
-          id: "4",
-          name: "Ningbo Ocean Export Trading",
-          type: "Trading Company",
-          confidence: 65,
-          address: "Building C, Free Trade Zone, Beilun District, Ningbo, Zhejiang 315800, China",
-          contact: "Mr. Wang Tao",
-          email: "export@nbocean.com",
-          phone: "+86 574 8765 4321",
-          products: ["Mixed Electronics", "Hardware", "Plastic Components"],
-        },
-        {
-          id: "5",
-          name: "Foshan Quality Products Factory",
-          type: "Factory",
-          confidence: 71,
-          address: "Zone B, Shishan Industrial Park, Nanhai District, Foshan, Guangdong 528200, China",
-          contact: "Ms. Huang Ying",
-          email: "quality@fsproducts.com",
-          phone: "+86 757 8888 1234",
-          products: ["Metal Parts", "Precision Tools", "Industrial Equipment"],
-        },
-      ];
+    let useTimeoutFallback = false;
 
-      const topMatch = mockResults.sort((a, b) => b.confidence - a.confidence)[0];
-      const factoryCount = mockResults.filter((r) => r.type === "Factory").length;
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
+    try {
+      // Call the backend API with streaming
+      const streamingResults: ManufacturerResult[] = [];
+      let streamingParsedQuery: any = null;
+      let streamingObservability: any = null;
+      let messageId = (Date.now() + 1).toString();
+      
+      // Create initial loading message
+      const loadingMessage: ChatMessage = {
+        id: messageId,
         role: "assistant",
-        content: `I've identified **${mockResults.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${mockResults.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+        content: "Searching for manufacturers...",
       };
+      addMessage(loadingMessage);
 
-      setMessages((prev) => [...prev, assistantMessage]);
-      onResults(mockResults);
-      setIsLoading(false);
-    }, 2000);
+      const response = await searchManufacturers(
+        {
+          query,
+          imageUrl: uploadedImage || undefined,
+        },
+        {
+          onStream: (event) => {
+            if (event.type === "parsed") {
+              streamingParsedQuery = event.data;
+              // Update message with parsed query info
+              updateMessage(messageId, {
+                content: `Parsed your query: **${event.data.product}**${event.data.location ? ` in ${event.data.location.join(", ")}` : ""}${event.data.category ? ` (${event.data.category}${event.data.subcategory ? ` - ${event.data.subcategory}` : ""})` : ""}\n\nSearching manufacturers...`,
+                parsedQuery: event.data,
+              });
+            } else if (event.type === "result") {
+              streamingResults.push(event.data);
+              // Update results in real-time (both context and callback)
+              const currentResults = [...streamingResults];
+              setResults(currentResults);
+              onResults?.(currentResults);
+              // Update message with count
+              const factoryCount = streamingResults.filter((r) => r.type === "Factory").length;
+              updateMessage(messageId, {
+                content: `Found **${streamingResults.length} manufacturer${streamingResults.length !== 1 ? "s" : ""}** so far...\n\n${factoryCount} factor${factoryCount !== 1 ? "ies" : "y"} and ${streamingResults.length - factoryCount} trading compan${streamingResults.length - factoryCount !== 1 ? "ies" : "y"} found.`,
+                observability: streamingObservability,
+                parsedQuery: streamingParsedQuery,
+              });
+            } else if (event.type === "complete") {
+              streamingObservability = event.data.observability;
+              const finalResults = streamingResults;
+              const factoryCount = finalResults.filter((r) => r.type === "Factory").length;
+              
+              // Update final message
+              updateMessage(messageId, {
+                content: `I've identified **${finalResults.length} potential manufacturer${finalResults.length !== 1 ? "s" : ""}** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${finalResults.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+                observability: streamingObservability,
+                parsedQuery: streamingParsedQuery,
+              });
+              setResults(finalResults);
+              onResults?.(finalResults);
+            } else if (event.type === "error") {
+              updateMessage(messageId, {
+                content: `Error: ${event.data}`,
+              });
+            }
+          },
+        }
+      );
+
+      // If non-streaming response (fallback), handle normally
+      if (response && !streamingResults.length) {
+        const results = response.results;
+        const factoryCount = results.filter((r) => r.type === "Factory").length;
+
+        const assistantMessage: ChatMessage = {
+          id: messageId,
+          role: "assistant",
+          content: `I've identified **${results.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${results.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+          observability: response.observability,
+          parsedQuery: response.parsedQuery,
+        };
+
+        updateMessage(messageId, assistantMessage);
+        setResults(results);
+        onResults?.(results);
+      }
+    } catch (error: any) {
+      console.error("Search error:", error);
+
+      // If API is not connected, use setTimeout to simulate response
+      if (error.message?.includes("fetch") || error.message?.includes("Network") || error.code === "ERR_NETWORK") {
+        console.log("API not connected, using mock data with setTimeout");
+        useTimeoutFallback = true;
+
+        setTimeout(() => {
+          const mockResults: ManufacturerResult[] = [
+            {
+              id: "1",
+              name: "Shenzhen Tech Manufacturing Co., Ltd",
+              type: "Factory" as const,
+              confidence: 95,
+              address: "Building 5, Industrial Park, Bao'an District, Shenzhen, Guangdong, China",
+              contact: "Zhang Wei",
+              email: "sales@shenzhentech.com",
+              phone: "+86 755 1234 5678",
+              products: ["LED Displays", "LED Lighting", "PCB Assembly", "Electronic Components"],
+            },
+            {
+              id: "2",
+              name: "Guangzhou Electronics Trading",
+              type: "Trading Company" as const,
+              confidence: 78,
+              address: "Room 1203, Trade Center, Tianhe District, Guangzhou, Guangdong, China",
+              contact: "Li Ming",
+              email: "info@gzelectronics.com",
+              phone: "+86 20 8765 4321",
+              products: ["Semiconductors", "Capacitors", "Resistors", "IC Chips"],
+            },
+          ];
+
+          const assistantMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: `I've identified **${mockResults.length} potential manufacturers** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. 1 factory and 1 trading company found.\n\n**Note:** API is not connected, showing mock data.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
+          };
+
+          addMessage(assistantMessage);
+          setResults(mockResults);
+          onResults?.(mockResults);
+          setIsLoading(false);
+        }, 1500);
+      } else {
+        // For other errors, show error message
+        const errorMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: `Sorry, I encountered an error while searching: ${error.message}\n\nPlease try again or contact support if the issue persists.`,
+        };
+
+        addMessage(errorMessage);
+      }
+    } finally {
+      // Only set loading to false if not using setTimeout fallback
+      if (!useTimeoutFallback) {
+        setIsLoading(false);
+      }
+    }
   };
 
   return (
@@ -175,6 +248,16 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
                   </p>
                 ))}
               </div>
+              {message.role === "assistant" && (message.observability || message.parsedQuery) && (
+                <div className="mt-3">
+                  <ObservabilityPanel
+                    response={{
+                      parsedQuery: message.parsedQuery || { product: "" },
+                      observability: message.observability,
+                    } as SearchResponse}
+                  />
+                </div>
+              )}
             </div>
           </div>
         ))}
