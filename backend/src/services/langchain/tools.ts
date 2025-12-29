@@ -7,7 +7,6 @@ import { extractManufacturerDataFromScrape } from "../../utils/transformers.js";
 /**
  * Tool: Search 1688.com for manufacturers
  */
-// @ts-expect-error - LangChain types are too complex for TypeScript to infer
 export const search1688Tool = new DynamicStructuredTool({
   name: "search_1688",
   description: "Search 1688.com (Chinese B2B marketplace) for manufacturers and suppliers based on product keywords and location",
@@ -15,7 +14,7 @@ export const search1688Tool = new DynamicStructuredTool({
     query: z.string().describe("Product or manufacturer search query in Chinese or English"),
     location: z.string().optional().describe("Location filter (e.g., 'Ningbo', 'Shenzhen', 'Zhejiang')"),
     limit: z.number().optional().default(10).describe("Maximum number of results to return"),
-  }),
+  }) as any,
   func: async ({ query, location, limit }: { query: string; location?: string; limit?: number }) => {
     try {
       const firecrawlService = getFirecrawlService();
@@ -45,7 +44,6 @@ export const search1688Tool = new DynamicStructuredTool({
 /**
  * Tool: Classify manufacturer type
  */
-// @ts-expect-error - LangChain types are too complex for TypeScript to infer
 export const classifyManufacturerTool = new DynamicStructuredTool({
   name: "classify_manufacturer",
   description: "Classify a 1688.com seller as a Factory or Trading Company based on their business information",
@@ -56,7 +54,7 @@ export const classifyManufacturerTool = new DynamicStructuredTool({
     products: z.array(z.string()).describe("List of products they sell"),
     factoryInfo: z.string().optional().describe("Factory information if available"),
     certifications: z.array(z.string()).optional().describe("Certifications held by the company"),
-  }),
+  }) as any,
   func: async ({ sellerId, companyName, description, products, factoryInfo, certifications }: { 
     sellerId: string; 
     companyName: string; 
@@ -92,14 +90,13 @@ export const classifyManufacturerTool = new DynamicStructuredTool({
 /**
  * Tool: Extract detailed manufacturer information from scraped page
  */
-// @ts-expect-error - LangChain types are too complex for TypeScript to infer
 export const extractDetailsTool = new DynamicStructuredTool({
   name: "extract_details",
   description: "Extract detailed manufacturer information from a scraped 1688.com page",
   schema: z.object({
     url: z.string().describe("URL of the 1688.com page to extract data from"),
     sellerId: z.string().describe("Unique seller ID"),
-  }),
+  }) as any,
   func: async ({ url, sellerId }: { url: string; sellerId: string }) => {
     try {
       const firecrawlService = getFirecrawlService();

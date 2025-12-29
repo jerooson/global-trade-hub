@@ -141,19 +141,17 @@ Use these tools to help users find the best manufacturers for their needs.`],
     ]);
 
     // TypeScript has issues with LangChain's complex types, so we use type assertions
-    // @ts-expect-error - LangChain types are too complex for TypeScript to infer
     const agent = await createToolCallingAgent({
       llm,
       tools,
       prompt,
-    });
+    }) as any;
 
-    // @ts-expect-error - LangChain types are too complex for TypeScript to infer
     return new AgentExecutor({
       agent,
       tools,
       verbose: true,
-    });
+    }) as any;
   } catch (error) {
     console.error("Error creating LangChain agent:", error);
     return null;
