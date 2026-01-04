@@ -8,6 +8,10 @@ import { ProductContext, useProductProvider } from "@/hooks/useProduct";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import OAuthCallback from "./pages/OAuthCallback";
 import Gallery from "./pages/Gallery";
 import Dashboard from "./pages/Dashboard";
 import Workspace from "./pages/Workspace";
@@ -22,10 +26,29 @@ const AppContent = () => {
   return (
     <ProductContext.Provider value={productState}>
       <Routes>
+        {/* Public routes */}
         <Route 
           path="/login" 
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
         />
+        <Route 
+          path="/register" 
+          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} 
+        />
+        <Route 
+          path="/forgot-password" 
+          element={<ForgotPassword />} 
+        />
+        <Route 
+          path="/reset-password" 
+          element={<ResetPassword />} 
+        />
+        <Route 
+          path="/oauth/callback" 
+          element={<OAuthCallback />} 
+        />
+        
+        {/* Protected routes */}
         <Route
           path="/"
           element={
@@ -50,6 +73,7 @@ const AppContent = () => {
             </ProtectedRoute>
           }
         />
+        
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
