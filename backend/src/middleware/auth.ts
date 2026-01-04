@@ -1,14 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 import { jwtService } from "../services/auth/jwtService.js";
 
-// Extend Express Request type to include user
+// Extend Express Request type to include JWT user info
+export interface JWTUser {
+  userId: string;
+  email: string;
+}
+
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        userId: string;
-        email: string;
-      };
+      jwtUser?: JWTUser;
     }
   }
 }
@@ -32,7 +34,7 @@ export function authenticateToken(
     }
 
     const payload = jwtService.verifyAccessToken(token);
-    req.user = payload;
+    req.jwtUser = payload;
     next();
   } catch (error) {
     if (error instanceof Error) {
@@ -62,7 +64,7 @@ export function optionalAuth(
 
     if (token) {
       const payload = jwtService.verifyAccessToken(token);
-      req.user = payload;
+      req.jwtUser = payload;
     }
   } catch (error) {
     // Silently fail for optional auth
@@ -81,7 +83,7 @@ export async function requireVerified(
   next: NextFunction
 ): Promise<void> {
   try {
-    if (!req.user) {
+    if (!req.jwtUser) {
       res.status(401).json({ error: "Authentication required" });
       return;
     }
