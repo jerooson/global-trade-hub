@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Globe, UserPlus, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Globe, UserPlus, AlertCircle, Eye, EyeOff, Check, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/useAuth";
 import { Progress } from "@/components/ui/progress";
@@ -45,6 +45,15 @@ const Register = () => {
     return "Strong";
   };
 
+  // Password requirements validation
+  const passwordRequirements = [
+    { label: "At least 8 characters", met: password.length >= 8 },
+    { label: "Contains uppercase letter", met: /[A-Z]/.test(password) },
+    { label: "Contains lowercase letter", met: /[a-z]/.test(password) },
+    { label: "Contains number", met: /[0-9]/.test(password) },
+    { label: "Contains special character (!@#$%^&*)", met: /[!@#$%^&*(),.?":{}|<>]/.test(password) },
+  ];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -72,7 +81,17 @@ const Register = () => {
       await register({ email, password, name });
       navigate("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Registration failed");
+      // Extract detailed error message from backend
+      const errorMessage = err.message || "Registration failed";
+      
+      // If it's a password validation error from backend, show specific requirements
+      if (errorMessage.includes("Password must")) {
+        setError(errorMessage);
+      } else if (errorMessage.includes("Email already registered")) {
+        setError("This email is already registered. Try logging in instead.");
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -149,14 +168,32 @@ const Register = () => {
               </div>
               {password && (
                 <div className="space-y-2">
-                  <Progress value={passwordStrength} className="h-2" />
-                  <p className={`text-xs font-medium ${
-                    passwordStrength < 40 ? "text-red-500" : 
-                    passwordStrength < 70 ? "text-yellow-500" : 
-                    "text-green-500"
-                  }`}>
-                    Password strength: {getStrengthLabel()}
-                  </p>
+                  <div className="space-y-1">
+                    <Progress value={passwordStrength} className="h-2" />
+                    <p className={`text-xs font-medium ${
+                      passwordStrength < 40 ? "text-red-500" : 
+                      passwordStrength < 70 ? "text-yellow-500" : 
+                      "text-green-500"
+                    }`}>
+                      Password strength: {getStrengthLabel()}
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-1 pt-2">
+                    <p className="text-xs font-medium text-muted-foreground">Requirements:</p>
+                    {passwordRequirements.map((req, index) => (
+                      <div key={index} className="flex items-center gap-2 text-xs">
+                        {req.met ? (
+                          <Check className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <X className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <span className={req.met ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+                          {req.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
