@@ -33,11 +33,11 @@ export function SourcingPage({ onNavigateToPricing, onSelectForPricing }: Sourci
   const showPanel = isPanelOpen;
 
   return (
-    <div className="h-full flex">
+    <div className="flex-1 flex overflow-hidden">
       {/* Chat Interface */}
       <div className={cn(
-        "flex flex-col h-full",
-        showPanel ? "flex-1 border-r border-border" : "w-full"
+        "flex flex-col flex-1 overflow-hidden",
+        showPanel ? "border-r border-border" : ""
       )}>
         <div className="h-14 px-6 flex items-center justify-between border-b border-border flex-shrink-0">
           <h1 className="font-semibold">Product Sourcing</h1>
@@ -68,40 +68,42 @@ export function SourcingPage({ onNavigateToPricing, onSelectForPricing }: Sourci
 
       {/* Results / Shortlist Panel - Show when toggled open */}
       {showPanel && (
-        <div className="w-[420px] flex flex-col bg-card/30 h-full">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "results" | "shortlist")} className="flex flex-col h-full">
-          <div className="h-14 px-4 flex items-center border-b border-border flex-shrink-0">
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="results" className="flex items-center gap-2">
-                <Building2 className="w-4 h-4" />
-                Results
-                {results.length > 0 && (
-                  <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
-                    {results.length}
-                  </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="shortlist" className="flex items-center gap-2">
-                <Star className="w-4 h-4" />
-                Shortlist
-                {shortlist.length > 0 && (
-                  <span className="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded-full">
-                    {shortlist.length}
-                  </span>
-                )}
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        <div className="w-[420px] flex flex-col bg-card/30 overflow-hidden">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "results" | "shortlist")} className="flex flex-col h-full">
+            <div className="h-14 px-4 flex items-center border-b border-border flex-shrink-0">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="results" className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Results
+                  {results.length > 0 && (
+                    <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
+                      {results.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="shortlist" className="flex items-center gap-2">
+                  <Star className="w-4 h-4" />
+                  Shortlist
+                  {shortlist.length > 0 && (
+                    <span className="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded-full">
+                      {shortlist.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-          <TabsContent value="results" className="flex-1 overflow-hidden mt-0 min-h-0">
-            <ManufacturerPanel results={results} onUseForPricing={handleUseForPricing} />
-          </TabsContent>
+            <div className="flex-1 overflow-hidden min-h-0">
+              <TabsContent value="results" className="h-full overflow-y-auto mt-0 data-[state=active]:block">
+                <ManufacturerPanel results={results} onUseForPricing={handleUseForPricing} />
+              </TabsContent>
 
-          <TabsContent value="shortlist" className="flex-1 overflow-hidden mt-0 min-h-0">
-            <ShortlistPanel onNavigateToPricing={onNavigateToPricing} />
-          </TabsContent>
-        </Tabs>
-      </div>
+              <TabsContent value="shortlist" className="h-full overflow-y-auto mt-0 data-[state=active]:block">
+                <ShortlistPanel onNavigateToPricing={onNavigateToPricing} />
+              </TabsContent>
+            </div>
+          </Tabs>
+        </div>
       )}
     </div>
   );

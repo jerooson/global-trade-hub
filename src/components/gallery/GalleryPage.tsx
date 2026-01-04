@@ -54,22 +54,26 @@ export function GalleryPage() {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex flex-col">
       {/* Header */}
-      <div className="h-14 px-6 flex items-center justify-between border-b border-border">
-        <div>
-          <h1 className="font-semibold text-lg">Product Gallery</h1>
-          <p className="text-sm text-muted-foreground">
-            Select a product to start your workflow
-          </p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Product
-            </Button>
-          </DialogTrigger>
+      <div className="container px-4 py-6">
+        <div className="flex items-center justify-between mb-6 gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Product
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Product</DialogTitle>
@@ -125,26 +129,14 @@ export function GalleryPage() {
               </Button>
             </DialogFooter>
           </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Search Bar */}
-      <div className="px-6 py-4 border-b border-border">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+          </Dialog>
         </div>
       </div>
 
       {/* Product Grid */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="container px-4 pb-8">
         {filteredProducts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
             <Package className="w-16 h-16 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No products found</h3>
             <p className="text-muted-foreground mb-4">
