@@ -19,7 +19,7 @@ const tabs = [
 export function HorizontalTabs({ activeTab, onTabChange }: HorizontalTabsProps) {
   return (
     <div className="border-b bg-background">
-      <div className="container px-4">
+      <div className="px-6">
         <nav className="flex items-center space-x-1 h-12">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
