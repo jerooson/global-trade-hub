@@ -1,9 +1,29 @@
 import express from "express";
 import cors from "cors";
+import session from "express-session";
+import passport from "passport";
 import { config } from "./config/env.js";
+import { initializeDatabase } from "./db/connection.js";
+import { configurePassport } from "./services/auth/passportConfig.js";
+import authRoutes from "./routes/auth.js";
 import sourcingRoutes from "./routes/sourcing.js";
 
 const app = express();
+
+// Initialize database
+try {
+  await initializeDatabase();
+} catch (error) {
+  console.error("❌ Failed to initialize database:", error);
+  if (config.nodeEnv === "production") {
+    process.exit(1);
+  } else {
+    console.warn("⚠️  Continuing without database in development mode");
+  }
+}
+
+// Initialize Passport
+configurePassport();
 
 // Middleware
 // In development, allow only port 8080 (frontend port from vite.config.ts)
@@ -27,12 +47,30 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Session middleware (required for OAuth)
+app.use(
+  session({
+    secret: config.jwtSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: config.nodeEnv === "production",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
+  })
+);
+
+// Initialize Passport middleware
+app.use(passport.initialize());
+app.use(passport.session());
+
 // Health check endpoint
 app.get("/health", (req: express.Request, res: express.Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // API Routes
+app.use("/api/auth", authRoutes);
 app.use("/api/sourcing", sourcingRoutes);
 
 // Error handling middleware
@@ -54,6 +92,7 @@ const PORT = config.port;
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📝 Health check: http://localhost:${PORT}/health`);
+  console.log(`🔐 Auth API: http://localhost:${PORT}/api/auth`);
   console.log(`🔍 Sourcing API: http://localhost:${PORT}/api/sourcing`);
 });
 
