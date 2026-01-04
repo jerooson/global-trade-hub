@@ -313,12 +313,12 @@ router.post(
  */
 router.get("/me", authenticateToken, async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    if (!req.jwtUser) {
       res.status(401).json({ error: "Not authenticated" });
       return;
     }
 
-    const user = await UserModel.findById(req.user.userId);
+    const user = await UserModel.findById(req.jwtUser.userId);
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -356,7 +356,7 @@ router.get(
   passport.authenticate("google", { session: false, failureRedirect: "/login" }),
   async (req: Request, res: Response) => {
     try {
-      const user = req.user as any;
+      const user = req.user as any; // Passport user, not JWT user
       if (!user) {
         res.redirect(`${config.frontendUrl}/login?error=auth_failed`);
         return;
@@ -392,7 +392,7 @@ router.get(
   passport.authenticate("github", { session: false, failureRedirect: "/login" }),
   async (req: Request, res: Response) => {
     try {
-      const user = req.user as any;
+      const user = req.user as any; // Passport user, not JWT user
       if (!user) {
         res.redirect(`${config.frontendUrl}/login?error=auth_failed`);
         return;
