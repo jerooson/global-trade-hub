@@ -184,8 +184,8 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
   };
 
   return (
-    <div className="h-full overflow-hidden p-3">
-      <div className="max-w-6xl mx-auto h-full flex flex-col">
+    <div className="flex-1 overflow-hidden p-3 flex flex-col">
+      <div className="max-w-6xl mx-auto flex-1 flex flex-col min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between mb-2 flex-shrink-0">
           <div className="flex items-center gap-2">
