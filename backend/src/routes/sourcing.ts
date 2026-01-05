@@ -60,6 +60,10 @@ router.post("/search", async (req: express.Request, res: express.Response, next:
           } else if (progress.type === "result") {
             res.write(`event: result\n`);
             res.write(`data: ${JSON.stringify({ result: progress.data })}\n\n`);
+          } else if (progress.type === "progress") {
+            // Stream progress updates (searching, deduplicating, filtering)
+            res.write(`event: progress\n`);
+            res.write(`data: ${JSON.stringify({ progress: progress.data })}\n\n`);
           } else if (progress.type === "complete") {
             const searchTime = (Date.now() - startTime) / 1000;
             res.write(`event: complete\n`);
@@ -68,6 +72,7 @@ router.post("/search", async (req: express.Request, res: express.Response, next:
               totalResults: progress.data.totalResults,
               searchTime: parseFloat(searchTime.toFixed(2)),
               observability: progress.data.observability,
+              finalResults: progress.data.finalResults, // Include filtered results
             })}\n\n`);
             res.end();
           } else if (progress.type === "error") {

@@ -1,9 +1,12 @@
+import { cn } from "@/lib/utils";
 import { LeftNavbar } from "@/components/layout/LeftNavbar";
 import { TopHeader } from "@/components/layout/TopHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useNavbar } from "@/hooks/useNavbar";
 import { TrendingUp, Package, Search, DollarSign, Users, ShoppingCart, LayoutDashboard } from "lucide-react";
 
 const Dashboard = () => {
+  const { isCollapsed } = useNavbar();
   // Temporary mock data for dashboard widgets
   const stats = [
     {
@@ -47,7 +50,7 @@ const Dashboard = () => {
     <div className="flex h-screen bg-background overflow-hidden">
       <LeftNavbar />
       
-      <div className="flex-1 flex flex-col ml-56">
+      <div className={cn("flex-1 flex flex-col transition-all duration-300", isCollapsed ? "ml-16" : "ml-56")}>
         <TopHeader 
           pageTitle="Dashboard"
           pageIcon={<LayoutDashboard className="w-5 h-5 text-primary" />}
