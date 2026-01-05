@@ -66,11 +66,22 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
       let streamingObservability: any = null;
       let messageId = (Date.now() + 1).toString();
       
+      // Track streaming observability state
+      const streamingObsState: any = {
+        currentStep: "parsing",
+        parsedQuery: null,
+        searchMethod: null,
+        deduplication: null,
+        filtering: null,
+        processingSteps: null,
+      };
+      
       // Create initial loading message
       const loadingMessage: ChatMessage = {
         id: messageId,
         role: "assistant",
-        content: "Searching for manufacturers...",
+        content: "Parsing your query...",
+        streamingObservability: streamingObsState,
       };
       addMessage(loadingMessage);
 
@@ -83,27 +94,90 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
           onStream: (event) => {
             if (event.type === "parsed") {
               streamingParsedQuery = event.data;
+              
+              // Create NEW object to trigger React re-render
+              const newObsState = {
+                ...streamingObsState,
+                currentStep: "searching" as const,
+                parsedQuery: event.data,
+              };
+              Object.assign(streamingObsState, newObsState);
+              
               // Update message with parsed query info
               updateMessage(messageId, {
                 content: `Parsed your query: **${event.data.product}**${event.data.location ? ` in ${event.data.location.join(", ")}` : ""}${event.data.category ? ` (${event.data.category}${event.data.subcategory ? ` - ${event.data.subcategory}` : ""})` : ""}\n\nSearching manufacturers...`,
                 parsedQuery: event.data,
+                streamingObservability: newObsState,
               });
+            } else if (event.type === "progress") {
+              // Handle progress updates for different steps
+              const progressData = event.data;
+              let newObsState;
+              
+              if (progressData.step === "searching") {
+                newObsState = {
+                  ...streamingObsState,
+                  currentStep: "searching" as const,
+                  searchMethod: progressData.searchMethod,
+                };
+                Object.assign(streamingObsState, newObsState);
+                updateMessage(messageId, {
+                  content: `Searching ${progressData.message || "manufacturers"}...`,
+                  streamingObservability: newObsState,
+                });
+              } else if (progressData.step === "deduplicating") {
+                newObsState = {
+                  ...streamingObsState,
+                  currentStep: "deduplicating" as const,
+                  deduplication: {
+                    beforeCount: progressData.beforeCount,
+                    afterCount: progressData.afterCount,
+                  },
+                };
+                Object.assign(streamingObsState, newObsState);
+                updateMessage(messageId, {
+                  content: `Processing results: ${progressData.beforeCount} → ${progressData.afterCount} unique manufacturers...`,
+                  streamingObservability: newObsState,
+                });
+              } else if (progressData.step === "filtering") {
+                newObsState = {
+                  ...streamingObsState,
+                  currentStep: "filtering" as const,
+                  filtering: {
+                    beforeCount: progressData.beforeCount,
+                    afterCount: progressData.afterCount,
+                    filtersApplied: progressData.filtersApplied,
+                  },
+                };
+                Object.assign(streamingObsState, newObsState);
+                updateMessage(messageId, {
+                  content: `Applying filters: ${progressData.beforeCount} → ${progressData.afterCount} results...`,
+                  streamingObservability: newObsState,
+                });
+              }
             } else if (event.type === "result") {
               streamingResults.push(event.data);
-              // Update results in real-time (both context and callback)
-              const currentResults = [...streamingResults];
-              setResults(currentResults);
-              onResults?.(currentResults);
-              // Update message with count
+              // DON'T update results in real-time - wait for final filtered results
+              // Just update the message to show progress
               const factoryCount = streamingResults.filter((r) => r.type === "Factory").length;
               updateMessage(messageId, {
-                content: `Found **${streamingResults.length} manufacturer${streamingResults.length !== 1 ? "s" : ""}** so far...\n\n${factoryCount} factor${factoryCount !== 1 ? "ies" : "y"} and ${streamingResults.length - factoryCount} trading compan${streamingResults.length - factoryCount !== 1 ? "ies" : "y"} found.`,
+                content: `Found **${streamingResults.length} manufacturer${streamingResults.length !== 1 ? "s" : ""}** so far...\n\nProcessing and filtering results...`,
                 observability: streamingObservability,
                 parsedQuery: streamingParsedQuery,
+                streamingObservability: { ...streamingObsState },
               });
             } else if (event.type === "complete") {
               streamingObservability = event.data.observability;
-              const finalResults = streamingResults;
+              
+              const newObsState = {
+                ...streamingObsState,
+                currentStep: "complete" as const,
+                processingSteps: event.data.observability?.processingSteps,
+              };
+              Object.assign(streamingObsState, newObsState);
+              
+              // Use finalResults from backend (filtered & limited) instead of all streamed results
+              const finalResults = event.data.finalResults || streamingResults;
               const factoryCount = finalResults.filter((r) => r.type === "Factory").length;
               
               // Update final message
@@ -111,6 +185,7 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
                 content: `I've identified **${finalResults.length} potential manufacturer${finalResults.length !== 1 ? "s" : ""}** ranked by confidence.\n\n**Top candidates are likely direct factories** with strong product focus. ${factoryCount} factories and ${finalResults.length - factoryCount} trading companies found.\n\n**Recommended next steps:**\n• Review details and **shortlist** preferred suppliers\n• Use filters to narrow by type or confidence\n• **Proceed to pricing** when ready`,
                 observability: streamingObservability,
                 parsedQuery: streamingParsedQuery,
+                streamingObservability: newObsState,
               });
               setResults(finalResults);
               onResults?.(finalResults);
@@ -248,32 +323,20 @@ export function ChatInterface({ onResults }: ChatInterfaceProps) {
                   </p>
                 ))}
               </div>
-              {message.role === "assistant" && (message.observability || message.parsedQuery) && (
+              {message.role === "assistant" && (message.observability || message.parsedQuery || message.streamingObservability) && (
                 <div className="mt-3">
                   <ObservabilityPanel
-                    response={{
+                    response={message.observability || message.parsedQuery ? {
                       parsedQuery: message.parsedQuery || { product: "" },
                       observability: message.observability,
-                    } as SearchResponse}
+                    } as SearchResponse : undefined}
+                    streamingData={message.streamingObservability}
                   />
                 </div>
               )}
             </div>
           </div>
         ))}
-        {isLoading && (
-          <div className="flex gap-3 animate-fade-in">
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-secondary text-secondary-foreground">
-              <Bot className="w-4 h-4" />
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">Analyzing and matching manufacturers...</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Image Preview */}

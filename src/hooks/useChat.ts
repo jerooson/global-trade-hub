@@ -9,6 +9,21 @@ export interface ChatMessage {
   image?: string;
   observability?: SearchResponse["observability"];
   parsedQuery?: SearchResponse["parsedQuery"];
+  streamingObservability?: {
+    currentStep: "idle" | "parsing" | "searching" | "deduplicating" | "filtering" | "complete";
+    parsedQuery?: any;
+    searchMethod?: "apify" | "firecrawl" | "mock";
+    deduplication?: {
+      beforeCount: number;
+      afterCount: number;
+    };
+    filtering?: {
+      beforeCount: number;
+      afterCount: number;
+      filtersApplied?: any;
+    };
+    processingSteps?: any;
+  };
 }
 
 interface ChatContextType {

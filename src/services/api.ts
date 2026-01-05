@@ -47,7 +47,7 @@ export async function searchManufacturers(
   request: SearchRequest,
   options?: {
     onStream?: (event: {
-      type: "parsed" | "result" | "complete" | "error";
+      type: "parsed" | "result" | "complete" | "error" | "progress";
       data: any;
     }) => void;
   }
@@ -105,18 +105,23 @@ export async function searchManufacturers(
           } else if (data.result) {
             results.push(data.result);
             options.onStream?.({ type: "result", data: data.result });
+          } else if (data.progress) {
+            // Handle progress updates (searching, deduplicating, filtering)
+            options.onStream?.({ type: "progress", data: data.progress });
           } else if (data.searchId) {
             observability = data.observability;
+            // Use finalResults from backend if available (filtered), otherwise use streamed results
+            const finalResults = data.finalResults || results;
             finalResponse = {
               searchId: data.searchId,
               query: request.query,
               parsedQuery: parsedQuery || { product: request.query },
-              results,
+              results: finalResults,
               totalResults: data.totalResults,
               searchTime: data.searchTime,
               observability,
             };
-            options.onStream?.({ type: "complete", data: finalResponse });
+            options.onStream?.({ type: "complete", data: { ...finalResponse, finalResults } });
           } else if (data.error) {
             options.onStream?.({ type: "error", data: data.error });
           }

@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProductContext, useProductProvider } from "@/hooks/useProduct";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { NavbarProvider } from "@/hooks/useNavbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -89,7 +90,9 @@ const App = () => (
         <Sonner />
         <BrowserRouter basename="/global-trade-hub">
           <AuthProvider>
-            <AppContent />
+            <NavbarProvider>
+              <AppContent />
+            </NavbarProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

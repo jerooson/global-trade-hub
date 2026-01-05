@@ -3,11 +3,11 @@ import { cn } from "@/lib/utils";
 import { Globe, LayoutDashboard, Package2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useNavbar } from "@/hooks/useNavbar";
 
 export function LeftNavbar() {
   const location = useLocation();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { isCollapsed, setIsCollapsed } = useNavbar();
   
   const isActive = (path: string) => {
     if (path === "/") {

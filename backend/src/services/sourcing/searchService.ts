@@ -70,7 +70,7 @@ export async function searchManufacturers(
   request: SourcingSearchRequest,
   options?: {
     onProgress?: (progress: {
-      type: "parsed" | "result" | "complete" | "error";
+      type: "parsed" | "result" | "complete" | "error" | "progress";
       data: any;
     }) => void;
   }
@@ -128,6 +128,16 @@ export async function searchManufacturers(
         rawResultsCount = apifyResults.length;
         searchMethod = "apify";
         
+        // Emit progress event after determining search method
+        options?.onProgress?.({
+          type: "progress",
+          data: {
+            step: "searching",
+            searchMethod: "apify",
+            message: "Searching Apify (Made-in-China)...",
+          },
+        });
+        
         // Transform Apify results to ManufacturerResult format
         for (let i = 0; i < apifyResults.length; i++) {
           const apifyResult = apifyResults[i];
@@ -184,6 +194,16 @@ export async function searchManufacturers(
         rawResultsCount = scrapeResults.length;
         searchMethod = "firecrawl";
         
+        // Emit progress event after determining search method
+        options?.onProgress?.({
+          type: "progress",
+          data: {
+            step: "searching",
+            searchMethod: "firecrawl",
+            message: "Searching Firecrawl...",
+          },
+        });
+        
         // Process Firecrawl results
         for (let i = 0; i < scrapeResults.length; i++) {
           const scrapeResult = scrapeResults[i];
@@ -216,6 +236,18 @@ export async function searchManufacturers(
         // Fallback to mock data
         const scrapeResults = generateMockScrapeResults(searchQuery, searchLocation);
         console.log(`Using ${scrapeResults.length} mock results for testing`);
+        rawResultsCount = scrapeResults.length;
+        searchMethod = "mock";
+        
+        // Emit progress event after determining search method
+        options?.onProgress?.({
+          type: "progress",
+          data: {
+            step: "searching",
+            searchMethod: "mock",
+            message: "Searching Mock Data...",
+          },
+        });
         
         // Process mock results
         for (let i = 0; i < scrapeResults.length; i++) {
@@ -288,16 +320,44 @@ export async function searchManufacturers(
     }
     manufacturerResults = Array.from(seenCompanies.values());
     console.log(`[Deduplication] Results after deduplication: ${manufacturerResults.length}`);
+    
+    // Emit progress event after deduplication
+    options?.onProgress?.({
+      type: "progress",
+      data: {
+        step: "deduplicating",
+        beforeCount: rawResultsCount,
+        afterCount: manufacturerResults.length,
+        message: `Found ${rawResultsCount} results, deduplicated to ${manufacturerResults.length}`,
+      },
+    });
 
     // Step 5: Apply filters (use parsed location from query if available)
     const filterLocation = request.filters?.location?.[0] || parsedQuery.location?.[0];
     console.log(`[Filter] Applying filters - Location: ${filterLocation || "none"}, Results before filter: ${manufacturerResults.length}`);
+    const beforeFilterCount = manufacturerResults.length;
     let filteredResults = filterManufacturers(manufacturerResults, {
       minConfidence: request.filters?.minConfidence,
       location: filterLocation, // Use parsed location from query
       manufacturerType: request.filters?.manufacturerType,
     });
     console.log(`[Filter] Results after filter: ${filteredResults.length}`);
+    
+    // Emit progress event after filtering
+    options?.onProgress?.({
+      type: "progress",
+      data: {
+        step: "filtering",
+        beforeCount: beforeFilterCount,
+        afterCount: filteredResults.length,
+        filtersApplied: {
+          location: filterLocation,
+          minConfidence: request.filters?.minConfidence,
+          manufacturerType: request.filters?.manufacturerType,
+        },
+        message: `Applied filters: ${beforeFilterCount} → ${filteredResults.length} results`,
+      },
+    });
 
     // Step 6: Sort by confidence
     filteredResults = sortManufacturers(filteredResults, "confidence", "desc");
@@ -341,6 +401,7 @@ export async function searchManufacturers(
         searchId,
         totalResults: filteredResults.length,
         observability: response.observability,
+        finalResults: limitedResults, // Send the filtered & limited results
       },
     });
 

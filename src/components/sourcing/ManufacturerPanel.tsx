@@ -23,12 +23,32 @@ export interface ManufacturerResult {
 interface ManufacturerPanelProps {
   results: ManufacturerResult[];
   onUseForPricing: (manufacturer: ManufacturerResult) => void;
+  isLoading?: boolean;
 }
 
-export function ManufacturerPanel({ results, onUseForPricing }: ManufacturerPanelProps) {
+export function ManufacturerPanel({ results, onUseForPricing, isLoading }: ManufacturerPanelProps) {
   const sortedResults = useMemo(() => {
     return [...results].sort((a, b) => b.confidence - a.confidence);
   }, [results]);
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center p-8">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto animate-pulse">
+            <Building2 className="w-8 h-8 text-muted-foreground animate-bounce" />
+          </div>
+          <div>
+            <h3 className="font-medium text-foreground">Processing Results...</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Searching, deduplicating, and filtering manufacturers
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (results.length === 0) {
     return (

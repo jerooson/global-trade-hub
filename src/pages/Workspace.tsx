@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { LeftNavbar } from "@/components/layout/LeftNavbar";
 import { TopHeader } from "@/components/layout/TopHeader";
 import { HorizontalTabs, TabId } from "@/components/layout/HorizontalTabs";
@@ -9,6 +10,7 @@ import { ShortlistContext, useShortlistProvider } from "@/hooks/useShortlist";
 import { ProductContext, useProductProvider } from "@/hooks/useProduct";
 import { CalculatorContext, useCalculatorProvider } from "@/hooks/useCalculator";
 import { ChatContext, useChatProvider } from "@/hooks/useChat";
+import { useNavbar } from "@/hooks/useNavbar";
 import { ManufacturerResult } from "@/components/sourcing/ManufacturerPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClipboardCheck } from "lucide-react";
@@ -16,6 +18,7 @@ import { ClipboardCheck } from "lucide-react";
 const Workspace = () => {
   const { productId } = useParams();
   const navigate = useNavigate();
+  const { isCollapsed } = useNavbar();
   const [activeTab, setActiveTab] = useState<TabId>("sourcing");
   const shortlistState = useShortlistProvider();
   const productState = useProductProvider();
@@ -58,7 +61,7 @@ const Workspace = () => {
           <div className="flex h-screen bg-background overflow-hidden">
             <LeftNavbar />
             
-            <div className="flex-1 flex flex-col ml-56">
+            <div className={cn("flex-1 flex flex-col transition-all duration-300", isCollapsed ? "ml-16" : "ml-56")}>
               <TopHeader product={productState.selectedProduct} />
               
               {/* Horizontal Tabs */}
