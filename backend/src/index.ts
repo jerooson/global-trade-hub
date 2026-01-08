@@ -7,6 +7,7 @@ import { initializeDatabase } from "./db/connection.js";
 import { configurePassport } from "./services/auth/passportConfig.js";
 import authRoutes from "./routes/auth.js";
 import sourcingRoutes from "./routes/sourcing.js";
+import imageGenerationRoutes from "./routes/imageGeneration.js";
 
 const app = express();
 
@@ -72,6 +73,7 @@ app.get("/health", (req: express.Request, res: express.Response) => {
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/sourcing", sourcingRoutes);
+app.use("/api/image", imageGenerationRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -94,5 +96,6 @@ app.listen(PORT, () => {
   console.log(`📝 Health check: http://localhost:${PORT}/health`);
   console.log(`🔐 Auth API: http://localhost:${PORT}/api/auth`);
   console.log(`🔍 Sourcing API: http://localhost:${PORT}/api/sourcing`);
+  console.log(`🎨 Image Generation API: http://localhost:${PORT}/api/image`);
 });
 

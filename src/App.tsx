@@ -16,6 +16,7 @@ import OAuthCallback from "./pages/OAuthCallback";
 import Gallery from "./pages/Gallery";
 import Dashboard from "./pages/Dashboard";
 import Workspace from "./pages/Workspace";
+import AIStudio from "./pages/AIStudio";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -71,6 +72,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <Workspace />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai-studio"
+          element={
+            <ProtectedRoute>
+              <AIStudio />
             </ProtectedRoute>
           }
         />
