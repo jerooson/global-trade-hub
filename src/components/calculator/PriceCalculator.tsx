@@ -65,14 +65,12 @@ function calculateUnitCost(input: CostInput): CalculationResult {
   // Excel formula: C22/C3 = BankFeeTotal / Quantity
   const bankFeePerUnitUsd = input.bankFeeTotalUsd / input.quantity;
 
-  // Step 8: Final Unit Cost (USD) - WITHOUT profit (for display)
-  const finalUnitCostUsd = baseUsdCost + freightCostPerUnitUsd + miscCostPerUnitUsd + bankFeePerUnitUsd;
+  // Step 8: Final Unit Cost (USD) - Base + Misc (product costs only, no freight/bank)
+  const finalUnitCostUsd = baseUsdCost + miscCostPerUnitUsd;
   
-  // Excel final formula: C5/C12*(1+C6)+C19+C23
-  // Where: C5=RMB Price, C12=Adjusted Rate, C6=Profit Rate, C19=Freight, C23=Bank Fee
-  // This calculates the SELLING PRICE with profit included
-  // Formula: (RMB Price / Adjusted Rate) * (1 + Profit Rate) + Freight + Misc + Bank Fee
-  const suggestedSellingPrice = baseUsdCost * (1 + input.targetProfitRate / 100) + freightCostPerUnitUsd + miscCostPerUnitUsd + bankFeePerUnitUsd;
+  // Suggested Selling Price: Apply profit to product costs (Base + Misc), then add pass-through costs (Freight + Bank)
+  // Formula: (Base Cost + Misc) × (1 + Profit Rate) + Freight + Bank Fee
+  const suggestedSellingPrice = finalUnitCostUsd * (1 + input.targetProfitRate / 100) + freightCostPerUnitUsd + bankFeePerUnitUsd;
 
   return {
     adjustedUsdToRmbRate,
@@ -135,17 +133,15 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
         
         if (isReverseCalculate && targetSellingPrice > 0) {
           // Reverse calculation: Calculate required profit margin
-          // Formula: Target Price = Base Cost × (1 + Profit Rate) + Freight + Misc + Bank Fee
-          // Rearranging: Profit Rate = ((Target Price - Fees) / Base Cost) - 1
-          const baseCost = calculationResult.baseUsdCost;
-          const totalFees = calculationResult.freightCostPerUnitUsd + 
-                           calculationResult.miscCostPerUnitUsd + 
-                           calculationResult.bankFeePerUnitUsd;
+          // Formula: Target Price = (Base + Misc) × (1 + Profit Rate) + Freight + Bank
+          // Rearranging: Profit Rate = ((Target Price - Freight - Bank) / (Base + Misc)) - 1
+          const productCost = calculationResult.finalUnitCostUsd; // Base + Misc
+          const passThroughCosts = calculationResult.freightCostPerUnitUsd + calculationResult.bankFeePerUnitUsd;
           
-          const availableForProfit = targetSellingPrice - totalFees;
+          const availableForMarkup = targetSellingPrice - passThroughCosts;
           
-          if (availableForProfit > 0 && baseCost > 0) {
-            const requiredProfitRate = ((availableForProfit / baseCost) - 1) * 100;
+          if (availableForMarkup > 0 && productCost > 0) {
+            const requiredProfitRate = ((availableForMarkup / productCost) - 1) * 100;
             
             // Don't update the target profit rate in form data - keep them separate
             // Just recalculate with the current form data to show updated results
@@ -156,7 +152,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
           } else {
             toast({
               title: "Invalid Target Price",
-              description: "Target price must be higher than total fees.",
+              description: "Target price must be higher than freight and bank costs.",
               variant: "destructive",
             });
           }
@@ -571,7 +567,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                         <div className="text-[9px] text-muted-foreground mb-0.5">
                           ({formData.usdRate} - {formData.agentFeeRate}) × (1 + {formData.taxRefundRate}%) = {(formData.usdRate - formData.agentFeeRate).toFixed(4)} × {(1 + formData.taxRefundRate / 100).toFixed(4)}
                         </div>
-                        <div className="font-semibold text-primary text-xs">¥{result.adjustedUsdToRmbRate.toFixed(4)}</div>
+                        <div className="font-semibold text-foreground text-xs">¥{result.adjustedUsdToRmbRate.toFixed(4)}</div>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
@@ -579,7 +575,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                         <div className="text-[9px] text-muted-foreground mb-0.5">
                           {formData.rmbUnitPrice} ÷ {result.adjustedUsdToRmbRate.toFixed(4)}
                         </div>
-                        <div className="font-semibold text-xs">${result.baseUsdCost.toFixed(4)}</div>
+                        <div className="font-semibold text-foreground text-xs">${result.baseUsdCost.toFixed(4)}</div>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
@@ -587,7 +583,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                         <div className="text-[9px] text-muted-foreground mb-0.5">
                           {formData.freightBaseRmb} + ({formData.cbm} × {formData.freightPerCbmRmb})
                         </div>
-                        <div className="font-semibold text-xs">¥{result.totalFreightRmb.toFixed(2)}</div>
+                        <div className="font-semibold text-foreground text-xs">¥{result.totalFreightRmb.toFixed(2)}</div>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
@@ -595,7 +591,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                         <div className="text-[9px] text-muted-foreground mb-0.5">
                           ({result.totalFreightRmb.toFixed(2)} ÷ {formData.quantity}) ÷ {formData.freightExchangeRate}
                         </div>
-                        <div className="font-semibold text-xs">${result.freightCostPerUnitUsd.toFixed(4)}</div>
+                        <div className="font-semibold text-foreground text-xs">${result.freightCostPerUnitUsd.toFixed(4)}</div>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
@@ -603,7 +599,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                         <div className="text-[9px] text-muted-foreground mb-0.5">
                           ({formData.miscRmb} ÷ {formData.quantity}) ÷ {result.adjustedUsdToRmbRate.toFixed(4)}
                         </div>
-                        <div className="font-semibold text-xs">${result.miscCostPerUnitUsd.toFixed(4)}</div>
+                        <div className="font-semibold text-foreground text-xs">${result.miscCostPerUnitUsd.toFixed(4)}</div>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-secondary/50 border border-border">
@@ -611,7 +607,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                         <div className="text-[9px] text-muted-foreground mb-0.5">
                           {formData.bankFeeTotalUsd} ÷ {formData.quantity}
                         </div>
-                        <div className="font-semibold text-xs">${result.bankFeePerUnitUsd.toFixed(4)}</div>
+                        <div className="font-semibold text-foreground text-xs">${result.bankFeePerUnitUsd.toFixed(4)}</div>
                       </div>
                     </div>
                   </div>
@@ -620,9 +616,9 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                   <div className="pt-2 space-y-1.5 border-t border-border">
                     <div className="flex justify-between items-center p-2 rounded-lg bg-secondary">
                       <div>
-                        <div className="font-medium text-xs mb-0.5">Final Unit Cost (USD)</div>
+                        <div className="font-medium text-xs mb-0.5">Product Cost (Base + Misc)</div>
                         <div className="text-[9px] text-muted-foreground">
-                          Base ${result.baseUsdCost.toFixed(4)} + Freight ${result.freightCostPerUnitUsd.toFixed(4)} + Misc ${result.miscCostPerUnitUsd.toFixed(4)} + Bank ${result.bankFeePerUnitUsd.toFixed(4)}
+                          Base ${result.baseUsdCost.toFixed(4)} + Misc ${result.miscCostPerUnitUsd.toFixed(4)}
                         </div>
                       </div>
                       <span className="text-lg font-bold text-primary">${result.finalUnitCostUsd.toFixed(2)}</span>
@@ -631,10 +627,10 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                       <div className="flex-1">
                         <div className="font-medium text-primary text-xs mb-0.5">Suggested Selling Price</div>
                         <div className="text-[9px] text-muted-foreground">
-                          Unit cost × (1 + {formData.targetProfitRate.toFixed(2)}% profit)
+                          ${result.finalUnitCostUsd.toFixed(2)} × {(1 + formData.targetProfitRate / 100).toFixed(2)} + Freight ${result.freightCostPerUnitUsd.toFixed(4)} + Bank ${result.bankFeePerUnitUsd.toFixed(4)}
                         </div>
                       </div>
-                      <span className="text-lg font-bold text-primary">${result.suggestedSellingPrice.toFixed(2)}</span>
+                      <span className="text-lg font-bold text-primary">${(Math.ceil(result.suggestedSellingPrice * 100) / 100).toFixed(2)}</span>
                     </div>
                     
                     {/* Reverse Calculation Section */}
@@ -684,10 +680,11 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                             </Button>
                           </div>
                           {reverseMode && targetSellingPrice > 0 && result && (() => {
-                            const totalFees = result.freightCostPerUnitUsd + result.miscCostPerUnitUsd + result.bankFeePerUnitUsd;
-                            const availableForProfit = targetSellingPrice - totalFees;
-                            const requiredProfitRate = availableForProfit > 0 && result.baseUsdCost > 0 
-                              ? ((availableForProfit / result.baseUsdCost) - 1) * 100 
+                            const productCost = result.finalUnitCostUsd; // Base + Misc
+                            const passThroughCosts = result.freightCostPerUnitUsd + result.bankFeePerUnitUsd;
+                            const availableForMarkup = targetSellingPrice - passThroughCosts;
+                            const requiredProfitRate = availableForMarkup > 0 && productCost > 0 
+                              ? ((availableForMarkup / productCost) - 1) * 100 
                               : null;
                             
                             return (
@@ -701,7 +698,7 @@ export function PriceCalculator({ selectedManufacturer }: PriceCalculatorProps) 
                                     : "Not feasible (below cost)"}
                                 </div>
                                 <div className="text-[9px] text-muted-foreground mt-1">
-                                  Formula: (${targetSellingPrice.toFixed(2)} - ${totalFees.toFixed(4)}) ÷ ${result.baseUsdCost.toFixed(4)} - 1
+                                  Formula: ((${targetSellingPrice.toFixed(2)} - ${passThroughCosts.toFixed(4)}) ÷ ${productCost.toFixed(2)}) - 1
                                 </div>
                                 <div className="text-[9px] text-muted-foreground mt-1 italic">
                                   Note: This shows the profit margin needed for your target price. The Target Profit field above remains unchanged.
