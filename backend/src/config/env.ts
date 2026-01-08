@@ -40,6 +40,9 @@ export const config = {
   // Apify Configuration
   apifyApiKey: process.env.APIFY_API_KEY,
   
+  // Gemini API (Nano Banana Image Generation)
+  geminiApiKey: process.env.GEMINI_API_KEY,
+  
   // CORS Configuration
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:8080",
 } as const;

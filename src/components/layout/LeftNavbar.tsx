@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Globe, LayoutDashboard, Package2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Globe, LayoutDashboard, Package2, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNavbar } from "@/hooks/useNavbar";
@@ -19,6 +19,7 @@ export function LeftNavbar() {
   const navItems = [
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { path: "/", icon: Package2, label: "Product Gallery" },
+    { path: "/ai-studio", icon: Sparkles, label: "AI Studio" },
   ];
 
   return (
