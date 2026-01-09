@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export interface GenerateImageRequest {
   prompt: string;
@@ -25,7 +25,7 @@ export async function generateImage(request: GenerateImageRequest): Promise<Imag
     throw new Error("Not authenticated. Please log in again.");
   }
 
-  const response = await fetch(`${API_URL}/image/generate`, {
+  const response = await fetch(`${API_URL}/api/image/generate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -52,7 +52,7 @@ export async function editImage(request: EditImageRequest): Promise<ImageRespons
     throw new Error("Not authenticated. Please log in again.");
   }
 
-  const response = await fetch(`${API_URL}/image/edit`, {
+  const response = await fetch(`${API_URL}/api/image/edit`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
