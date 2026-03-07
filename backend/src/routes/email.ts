@@ -6,13 +6,6 @@ import { authenticateToken } from "../middleware/auth.js";
 
 const router = Router();
 
-interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-  };
-}
-
 router.post(
   "/send-bulk",
   authenticateToken,
@@ -22,7 +15,7 @@ router.post(
     body("recipients").isArray({ min: 1 }).withMessage("At least one recipient is required"),
     body("recipients.*.email").isEmail().withMessage("Valid email is required"),
   ],
-  async (req: AuthRequest, res: Response) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -34,7 +27,7 @@ router.post(
       recipients: EmailRecipient[];
     };
 
-    const userId = req.user?.id;
+    const userId = req.jwtUser?.userId;
 
     try {
       const campaignResult = await pool.query(
@@ -103,8 +96,8 @@ router.post(
 router.get(
   "/campaigns",
   authenticateToken,
-  async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.id;
+  async (req: Request, res: Response) => {
+    const userId = req.jwtUser?.userId;
 
     try {
       const result = await pool.query(
@@ -130,9 +123,9 @@ router.get(
 router.get(
   "/campaigns/:campaignId",
   authenticateToken,
-  async (req: AuthRequest, res: Response) => {
+  async (req: Request, res: Response) => {
     const { campaignId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.jwtUser?.userId;
 
     try {
       const campaignResult = await pool.query(
