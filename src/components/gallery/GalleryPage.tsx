@@ -44,13 +44,12 @@ export function GalleryPage() {
     setNewProduct({ name: "", description: "", category: "" });
     setIsDialogOpen(false);
     // Navigate to workspace with the new product
-    navigate(`/workspace/${product.id}`);
+    navigate(`/product-gallery/${product.id}`);
   };
 
   const handleSelectProduct = (product: typeof products[0]) => {
     setSelectedProduct(product);
-    // Navigate to workspace with the selected product
-    navigate(`/workspace/${product.id}`);
+    navigate(`/product-gallery/${product.id}`);
   };
 
   return (

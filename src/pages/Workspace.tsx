@@ -39,7 +39,7 @@ const Workspace = () => {
   // Redirect to gallery if no product is selected after products are loaded
   useEffect(() => {
     if (productState.products.length > 0 && !productState.selectedProduct && !productId) {
-      navigate("/");
+      navigate("/product-gallery");
     }
   }, [productState.selectedProduct, productState.products, navigate, productId]);
 
