@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Loader2, Plus, X } from "lucide-react";
+import {
+  Mail, Send, Loader2, Plus, X, Eye,
+  History, Users, PenSquare, Trash2, UserPlus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { sendBulkEmail, getCampaigns, EmailRecipient } from "@/services/emailApi";
 import { LeftNavbar } from "@/components/layout/LeftNavbar";
@@ -13,13 +17,73 @@ import { TopHeader } from "@/components/layout/TopHeader";
 import { useNavbar } from "@/hooks/useNavbar";
 import { cn } from "@/lib/utils";
 
+type Tab = "compose" | "history" | "contacts";
+
+interface Contact {
+  id: string;
+  email: string;
+  name: string;
+  tags: string[];
+  addedAt: string;
+}
+
+function parseTags(raw: string): string[] {
+  return raw.split(/[,|]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+}
+
+function tagColorClass(tag: string | undefined): string {
+  if (!tag) return "bg-muted text-muted-foreground";
+  const palette = [
+    "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400",
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400",
+    "bg-violet-100 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400",
+    "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
+    "bg-rose-100 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400",
+    "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400",
+  ];
+  const idx = tag.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % palette.length;
+  return palette[idx];
+}
+
+function loadContacts(): Contact[] {
+  try {
+    const raw: Contact[] = JSON.parse(localStorage.getItem("gth_contacts") || "[]");
+    // Migrate contacts saved before `tags` was added
+    return raw.map((c) => ({ ...c, tags: c.tags ?? [] }));
+  } catch {
+    return [];
+  }
+}
+
+function saveContacts(contacts: Contact[]) {
+  localStorage.setItem("gth_contacts", JSON.stringify(contacts));
+}
+
 export default function EmailCampaigns() {
   const queryClient = useQueryClient();
   const { isCollapsed } = useNavbar();
+  const [activeTab, setActiveTab] = useState<Tab>("compose");
+
+  // Compose state
   const [subject, setSubject] = useState("");
   const [content, setContent] = useState("");
   const [recipients, setRecipients] = useState<EmailRecipient[]>([{ email: "", name: "" }]);
   const [bulkEmails, setBulkEmails] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
+
+  // Contacts state
+  const [contacts, setContacts] = useState<Contact[]>(loadContacts);
+  const [newEmail, setNewEmail] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newTagInput, setNewTagInput] = useState("");
+  const [newTags, setNewTags] = useState<string[]>([]);
+  const [bulkContactImport, setBulkContactImport] = useState("");
+  const [contactSearch, setContactSearch] = useState("");
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [pickerTagFilter, setPickerTagFilter] = useState<string | null>(null);
 
   const { data: campaigns, isLoading: loadingCampaigns } = useQuery({
     queryKey: ["email-campaigns"],
@@ -29,7 +93,7 @@ export default function EmailCampaigns() {
   const sendEmailMutation = useMutation({
     mutationFn: sendBulkEmail,
     onSuccess: (data) => {
-      toast.success(`Email campaign sent! ${data.sentCount} sent, ${data.failedCount} failed`);
+      toast.success(`Campaign sent — ${data.sentCount} delivered, ${data.failedCount} failed`);
       setSubject("");
       setContent("");
       setRecipients([{ email: "", name: "" }]);
@@ -37,16 +101,16 @@ export default function EmailCampaigns() {
       queryClient.invalidateQueries({ queryKey: ["email-campaigns"] });
     },
     onError: (error: Error) => {
-      toast.error(`Failed to send emails: ${error.message}`);
+      toast.error(`Failed to send: ${error.message}`);
     },
   });
 
-  const addRecipient = () => {
-    setRecipients([...recipients, { email: "", name: "" }]);
-  };
+  // ── Compose helpers ──────────────────────────────────────────────────────────
+  const addRecipient = () => setRecipients([...recipients, { email: "", name: "" }]);
 
   const removeRecipient = (index: number) => {
-    setRecipients(recipients.filter((_, i) => i !== index));
+    const updated = recipients.filter((_, i) => i !== index);
+    setRecipients(updated.length > 0 ? updated : [{ email: "", name: "" }]);
   };
 
   const updateRecipient = (index: number, field: keyof EmailRecipient, value: string) => {
@@ -56,47 +120,154 @@ export default function EmailCampaigns() {
   };
 
   const parseBulkEmails = () => {
-    const lines = bulkEmails.split("\n").filter((line) => line.trim());
-    const parsed: EmailRecipient[] = [];
-
-    for (const line of lines) {
+    const lines = bulkEmails.split("\n").filter((l) => l.trim());
+    const parsed: EmailRecipient[] = lines.map((line) => {
       if (line.includes(",")) {
         const [email, name] = line.split(",").map((s) => s.trim());
-        parsed.push({ email, name });
-      } else {
-        parsed.push({ email: line.trim() });
+        return { email, name };
       }
-    }
-
+      return { email: line.trim() };
+    });
     setRecipients(parsed);
     setBulkEmails("");
     toast.success(`Added ${parsed.length} recipients`);
   };
 
   const handleSend = () => {
-    const validRecipients = recipients.filter((r) => r.email.trim());
+    const valid = recipients.filter((r) => r.email.trim());
+    if (!subject.trim()) return toast.error("Subject is required");
+    if (!content.trim()) return toast.error("Content is required");
+    if (valid.length === 0) return toast.error("At least one recipient is required");
+    sendEmailMutation.mutate({ subject, content, recipients: valid });
+  };
 
-    if (!subject.trim()) {
-      toast.error("Subject is required");
-      return;
+  // ── Contact helpers ──────────────────────────────────────────────────────────
+  const addContact = () => {
+    if (!newEmail.trim()) return toast.error("Email is required");
+    if (contacts.some((c) => c.email === newEmail.trim()))
+      return toast.error("Contact already exists");
+    // Flush any pending tag input
+    const pendingTag = newTagInput.trim().toLowerCase();
+    const finalTags = pendingTag && !newTags.includes(pendingTag)
+      ? [...newTags, pendingTag]
+      : newTags;
+    const updated = [
+      ...contacts,
+      { id: crypto.randomUUID(), email: newEmail.trim(), name: newName.trim(), tags: finalTags, addedAt: new Date().toISOString() },
+    ];
+    setContacts(updated);
+    saveContacts(updated);
+    setNewEmail("");
+    setNewName("");
+    setNewTags([]);
+    setNewTagInput("");
+    toast.success("Contact added");
+  };
+
+  const addTagChip = () => {
+    const tag = newTagInput.trim().toLowerCase();
+    if (!tag) return;
+    if (!newTags.includes(tag)) setNewTags([...newTags, tag]);
+    setNewTagInput("");
+  };
+
+  const removeTagChip = (tag: string) =>
+    setNewTags(newTags.filter((t) => t !== tag));
+
+  const removeContact = (id: string) => {
+    const updated = contacts.filter((c) => c.id !== id);
+    setContacts(updated);
+    saveContacts(updated);
+  };
+
+  const importBulkContacts = () => {
+    const lines = bulkContactImport.split("\n").filter((l) => l.trim());
+    const existing = new Set(contacts.map((c) => c.email));
+    const newContacts: Contact[] = [];
+    for (const line of lines) {
+      const parts = line.split(",").map((s) => s.trim());
+      const email = parts[0];
+      const name = parts[1] || "";
+      const tags = parts[2] ? parseTags(parts[2]) : [];
+      if (email && !existing.has(email)) {
+        newContacts.push({ id: crypto.randomUUID(), email, name, tags, addedAt: new Date().toISOString() });
+        existing.add(email);
+      }
     }
+    const updated = [...contacts, ...newContacts];
+    setContacts(updated);
+    saveContacts(updated);
+    setBulkContactImport("");
+    toast.success(`Imported ${newContacts.length} contacts`);
+  };
 
-    if (!content.trim()) {
-      toast.error("Content is required");
-      return;
-    }
+  const useContactsInCampaign = () => {
+    const filtered = filteredContacts;
+    setRecipients(filtered.map((c) => ({ email: c.email, name: c.name })));
+    setActiveTab("compose");
+    toast.success(`${filtered.length} contacts added to campaign`);
+  };
 
-    if (validRecipients.length === 0) {
-      toast.error("At least one recipient is required");
-      return;
-    }
+  // ── Derived lists ─────────────────────────────────────────────────────────
+  const allTags = Array.from(new Set(contacts.flatMap((c) => c.tags))).sort();
 
-    sendEmailMutation.mutate({
-      subject,
-      content,
-      recipients: validRecipients,
+  // ── Contact picker helpers ────────────────────────────────────────────────
+  const pickerFiltered = contacts.filter((c) => {
+    const matchSearch = pickerSearch
+      ? c.email.toLowerCase().includes(pickerSearch.toLowerCase()) ||
+        c.name.toLowerCase().includes(pickerSearch.toLowerCase()) ||
+        c.tags.some((t) => t.includes(pickerSearch.toLowerCase()))
+      : true;
+    const matchTag = pickerTagFilter ? c.tags.includes(pickerTagFilter) : true;
+    return matchSearch && matchTag;
+  });
+
+  const togglePickerContact = (id: string) => {
+    setPickerSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
     });
   };
+
+  const togglePickerAll = () => {
+    if (pickerSelected.size === pickerFiltered.length) {
+      setPickerSelected(new Set());
+    } else {
+      setPickerSelected(new Set(pickerFiltered.map((c) => c.id)));
+    }
+  };
+
+  const applyPickerSelection = () => {
+    const chosen = contacts.filter((c) => pickerSelected.has(c.id));
+    const existing = recipients.filter((r) => r.email.trim());
+    const existingEmails = new Set(existing.map((r) => r.email));
+    const toAdd = chosen
+      .filter((c) => !existingEmails.has(c.email))
+      .map((c) => ({ email: c.email, name: c.name }));
+    setRecipients([...existing, ...toAdd]);
+    setContactPickerOpen(false);
+    setPickerSelected(new Set());
+    setPickerSearch("");
+    toast.success(`${toAdd.length} contact${toAdd.length !== 1 ? "s" : ""} added`);
+  };
+
+  const openContactPicker = () => {
+    setPickerSelected(new Set());
+    setPickerSearch("");
+    setPickerTagFilter(null);
+    setContactPickerOpen(true);
+  };
+
+  const filteredContacts = contacts.filter((c) => {
+    const matchSearch = contactSearch
+      ? c.email.toLowerCase().includes(contactSearch.toLowerCase()) ||
+        c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+        c.tags.some((t) => t.includes(contactSearch.toLowerCase()))
+      : true;
+    const matchTag = activeTagFilter ? c.tags.includes(activeTagFilter) : true;
+    return matchSearch && matchTag;
+  });
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -108,189 +279,615 @@ export default function EmailCampaigns() {
     return <Badge variant={variants[status] || "outline"}>{status}</Badge>;
   };
 
+  const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
+    { id: "compose", label: "New Campaign", icon: PenSquare },
+    { id: "history", label: "Campaign History", icon: History },
+    { id: "contacts", label: "Contact Management", icon: Users },
+  ];
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <LeftNavbar />
-      
+
       <div className={cn("flex-1 flex flex-col transition-all duration-300", isCollapsed ? "ml-16" : "ml-56")}>
-        <TopHeader 
+        <TopHeader
           pageTitle="Email Campaigns"
-          pageIcon={<Mail className="w-5 h-5 text-primary" />}
+          pageIcon={<Mail className="w-3.5 h-3.5 text-primary" />}
         />
-        
+
+        {/* Sub-navigation */}
+        <div className="border-b border-border bg-background shrink-0">
+          <div className="flex gap-0 px-6">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-3 text-sm border-b-2 transition-colors font-display tracking-wide",
+                    active
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex-1 overflow-auto p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
-            <div>
-              <p className="text-muted-foreground">
-                Send bulk emails to multiple recipients
-              </p>
-            </div>
+          <div className="max-w-4xl mx-auto">
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Send Email Form */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Send New Campaign</CardTitle>
-              <CardDescription>
-                Create and send a new email campaign to multiple recipients
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Subject</label>
-                <Input
-                  placeholder="Email subject..."
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                />
-              </div>
+            {/* ── Compose Tab ─────────────────────────────────────────────────── */}
+            {activeTab === "compose" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>New Campaign</CardTitle>
+                  <CardDescription>Compose and send an email campaign to your recipients</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Subject</label>
+                    <Input
+                      placeholder="Email subject..."
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
+                    />
+                  </div>
 
-              <div>
-                <label className="text-sm font-medium mb-2 block">Content (HTML)</label>
-                <Textarea
-                  placeholder="Email content (HTML supported)..."
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  rows={8}
-                  className="font-mono text-sm"
-                />
-              </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium">Content (HTML)</label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPreviewOpen(true)}
+                        disabled={!content.trim()}
+                      >
+                        <Eye className="w-3.5 h-3.5 mr-1.5" />
+                        Preview
+                      </Button>
+                    </div>
+                    <Textarea
+                      placeholder="Email content (HTML supported)..."
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      rows={8}
+                      className="font-mono text-sm"
+                    />
+                  </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium">Recipients</label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addRecipient}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Add
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium">
+                        Recipients
+                        <span className="ml-2 text-xs text-muted-foreground font-normal">
+                          {recipients.filter((r) => r.email.trim()).length} added
+                        </span>
+                      </label>
+                      <div className="flex gap-2">
+                        {contacts.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={openContactPicker}
+                          >
+                            <Users className="w-3.5 h-3.5 mr-1.5" />
+                            From Contacts
+                          </Button>
+                        )}
+                        <Button type="button" variant="outline" size="sm" onClick={addRecipient}>
+                          <Plus className="w-4 h-4 mr-1" />
+                          Add
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto p-1 -mx-1">
+                      {recipients.map((recipient, index) => (
+                        <div key={index} className="flex gap-2">
+                          <Input
+                            placeholder="email@example.com"
+                            value={recipient.email}
+                            onChange={(e) => updateRecipient(index, "email", e.target.value)}
+                            className="flex-1"
+                          />
+                          <Input
+                            placeholder="Name (optional)"
+                            value={recipient.name || ""}
+                            onChange={(e) => updateRecipient(index, "name", e.target.value)}
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeRecipient(index)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">
+                      Bulk Import <span className="text-muted-foreground font-normal">(one per line: email or email, name)</span>
+                    </label>
+                    <Textarea
+                      placeholder={"user@example.com\njohn@example.com,John Doe"}
+                      value={bulkEmails}
+                      onChange={(e) => setBulkEmails(e.target.value)}
+                      rows={3}
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={parseBulkEmails}
+                      disabled={!bulkEmails.trim()}
+                      className="mt-2"
+                    >
+                      Parse Emails
+                    </Button>
+                  </div>
+
+                  <Button onClick={handleSend} disabled={sendEmailMutation.isPending} className="w-full">
+                    {sendEmailMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending…</>
+                    ) : (
+                      <><Send className="w-4 h-4 mr-2" />Send Campaign</>
+                    )}
                   </Button>
-                </div>
+                </CardContent>
+              </Card>
+            )}
 
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {recipients.map((recipient, index) => (
-                    <div key={index} className="flex gap-2">
+            {/* ── History Tab ─────────────────────────────────────────────────── */}
+            {activeTab === "history" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Campaign History</CardTitle>
+                  <CardDescription>All email campaigns you've sent</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingCampaigns ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : campaigns && campaigns.length > 0 ? (
+                    <div className="space-y-2">
+                      {campaigns.map((campaign) => (
+                        <div
+                          key={campaign.id}
+                          className="flex items-center justify-between px-4 py-3 rounded-md border border-border hover:bg-accent/40 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0 mr-4">
+                            <p className="text-sm font-medium truncate">{campaign.subject}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {new Date(campaign.created_at).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-4 shrink-0">
+                            <div className="text-xs text-muted-foreground text-right">
+                              <span className="text-foreground font-medium">{campaign.sent_count}</span> sent
+                              {campaign.failed_count > 0 && (
+                                <span className="text-destructive ml-2">
+                                  · {campaign.failed_count} failed
+                                </span>
+                              )}
+                            </div>
+                            {getStatusBadge(campaign.status)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 text-muted-foreground">
+                      <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">No campaigns sent yet</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => setActiveTab("compose")}
+                      >
+                        Create your first campaign
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Contacts Tab ────────────────────────────────────────────────── */}
+            {activeTab === "contacts" && (
+              <div className="space-y-6">
+                {/* Add contact */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Add Contact</CardTitle>
+                    <CardDescription>Save contacts to quickly populate campaign recipients</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex gap-3">
                       <Input
                         placeholder="email@example.com"
-                        value={recipient.email}
-                        onChange={(e) => updateRecipient(index, "email", e.target.value)}
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addContact()}
                         className="flex-1"
                       />
                       <Input
                         placeholder="Name (optional)"
-                        value={recipient.name || ""}
-                        onChange={(e) => updateRecipient(index, "name", e.target.value)}
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addContact()}
                         className="flex-1"
+                      />
+                    </div>
+
+                    {/* Tags chip input */}
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Tags <span className="text-muted-foreground font-normal">(press Enter or comma to add)</span>
+                      </label>
+                      <div className={cn(
+                        "flex flex-wrap gap-1.5 min-h-[2.5rem] px-3 py-2 rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 transition-shadow",
+                        newTags.length > 0 && "pb-1.5"
+                      )}>
+                        {newTags.map((tag) => (
+                          <span key={tag} className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium", tagColorClass(tag))}>
+                            {tag}
+                            <button type="button" onClick={() => removeTagChip(tag)} className="hover:opacity-70">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                        <input
+                          className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                          placeholder={newTags.length === 0 ? "e.g. vip, newsletter, client…" : ""}
+                          value={newTagInput}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val.endsWith(",")) {
+                              const tag = val.slice(0, -1).trim().toLowerCase();
+                              if (tag && !newTags.includes(tag)) setNewTags([...newTags, tag]);
+                              setNewTagInput("");
+                            } else {
+                              setNewTagInput(val);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { e.preventDefault(); addTagChip(); }
+                            if (e.key === "Backspace" && !newTagInput && newTags.length > 0)
+                              removeTagChip(newTags[newTags.length - 1]);
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <Button onClick={addContact} disabled={!newEmail.trim()} className="w-full">
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Add Contact
+                    </Button>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Bulk Import <span className="text-muted-foreground font-normal">(email, name, tag1|tag2)</span>
+                      </label>
+                      <Textarea
+                        placeholder={"user@example.com\njohn@example.com,John Doe,vip|newsletter\njane@example.com,Jane,client"}
+                        value={bulkContactImport}
+                        onChange={(e) => setBulkContactImport(e.target.value)}
+                        rows={3}
+                        className="font-mono text-sm"
                       />
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeRecipient(index)}
-                        disabled={recipients.length === 1}
+                        variant="outline"
+                        size="sm"
+                        onClick={importBulkContacts}
+                        disabled={!bulkContactImport.trim()}
+                        className="mt-2"
                       >
-                        <X className="w-4 h-4" />
+                        Import Contacts
                       </Button>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </CardContent>
+                </Card>
 
-              <div>
-                <label className="text-sm font-medium mb-2 block">
-                  Or Bulk Import (one per line, email or email,name)
-                </label>
-                <Textarea
-                  placeholder="user@example.com&#10;john@example.com,John Doe&#10;jane@example.com,Jane Smith"
-                  value={bulkEmails}
-                  onChange={(e) => setBulkEmails(e.target.value)}
-                  rows={4}
-                  className="font-mono text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={parseBulkEmails}
-                  disabled={!bulkEmails.trim()}
-                  className="mt-2"
-                >
-                  Parse Bulk Emails
-                </Button>
-              </div>
-
-              <Button
-                onClick={handleSend}
-                disabled={sendEmailMutation.isPending}
-                className="w-full"
-              >
-                {sendEmailMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4 mr-2" />
-                    Send Campaign
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Campaign History */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Campaign History</CardTitle>
-              <CardDescription>View your recent email campaigns</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingCampaigns ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-8 h-8 animate-spin" />
-                </div>
-              ) : campaigns && campaigns.length > 0 ? (
-                <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                  {campaigns.map((campaign) => (
-                    <div
-                      key={campaign.id}
-                      className="border rounded-lg p-4 hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <h3 className="font-semibold">{campaign.subject}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(campaign.created_at).toLocaleString()}
-                          </p>
-                        </div>
-                        {getStatusBadge(campaign.status)}
+                {/* Contact list */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Contacts <span className="text-muted-foreground font-normal text-base">({contacts.length})</span></CardTitle>
+                        <CardDescription>Saved contacts for your campaigns</CardDescription>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Total: {campaign.total_recipients}</span>
-                        <span className="text-green-600">Sent: {campaign.sent_count}</span>
-                        {campaign.failed_count > 0 && (
-                          <span className="text-red-600">Failed: {campaign.failed_count}</span>
+                      {contacts.length > 0 && (
+                        <Button onClick={useContactsInCampaign} size="sm">
+                          <Send className="w-3.5 h-3.5 mr-1.5" />
+                          Use in Campaign
+                        </Button>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {contacts.length > 0 && (
+                      <div className="space-y-3 mb-4">
+                        <Input
+                          placeholder="Search by name, email, or tag…"
+                          value={contactSearch}
+                          onChange={(e) => setContactSearch(e.target.value)}
+                        />
+                        {allTags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              onClick={() => setActiveTagFilter(null)}
+                              className={cn(
+                                "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                                activeTagFilter === null
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground hover:bg-accent"
+                              )}
+                            >
+                              All
+                            </button>
+                            {allTags.map((tag) => (
+                              <button
+                                key={tag}
+                                onClick={() => setActiveTagFilter(activeTagFilter === tag ? null : tag)}
+                                className={cn(
+                                  "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                                  activeTagFilter === tag
+                                    ? "bg-primary text-primary-foreground"
+                                    : cn(tagColorClass(tag), "hover:opacity-80")
+                                )}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Mail className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No campaigns yet</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-            </div>
+                    )}
+                    {contacts.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">No contacts yet</p>
+                      </div>
+                    ) : filteredContacts.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">No contacts match your search</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {filteredContacts.map((contact) => (
+                          <div
+                            key={contact.id}
+                            className="flex items-start justify-between px-3 py-2.5 rounded-md hover:bg-accent/40 transition-colors group"
+                          >
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                                <span className="text-xs font-display font-semibold text-primary">
+                                  {(contact.name || contact.email)[0].toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                {contact.name && (
+                                  <p className="text-sm font-medium truncate">{contact.name}</p>
+                                )}
+                                <p className={cn("text-xs truncate", contact.name ? "text-muted-foreground" : "text-sm text-foreground")}>
+                                  {contact.email}
+                                </p>
+                                {contact.tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {contact.tags.map((tag) => (
+                                      <span key={tag} className={cn("px-1.5 py-px rounded text-[10px] font-medium", tagColorClass(tag))}>
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeContact(contact.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-muted-foreground hover:text-destructive shrink-0 mt-0.5"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
+
+      {/* Contact Picker Dialog */}
+      <Dialog open={contactPickerOpen} onOpenChange={setContactPickerOpen}>
+        <DialogContent className="max-w-lg w-full flex flex-col gap-0 p-0 overflow-hidden max-h-[80vh]">
+          <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
+            <DialogTitle className="font-display text-base font-semibold">Select Contacts</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {pickerSelected.size > 0
+                ? `${pickerSelected.size} selected`
+                : "Choose contacts to add as recipients"}
+            </p>
+          </DialogHeader>
+
+          {/* Search + tag filter */}
+          <div className="px-4 py-3 border-b border-border shrink-0 space-y-2">
+            <Input
+              placeholder="Search by name, email, or tag…"
+              value={pickerSearch}
+              onChange={(e) => setPickerSearch(e.target.value)}
+              autoFocus
+            />
+            {allTags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => setPickerTagFilter(null)}
+                  className={cn(
+                    "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                    pickerTagFilter === null
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-accent"
+                  )}
+                >
+                  All
+                </button>
+                {allTags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => setPickerTagFilter(pickerTagFilter === tag ? null : tag)}
+                    className={cn(
+                      "px-2.5 py-0.5 rounded text-xs font-medium transition-colors",
+                      pickerTagFilter === tag
+                        ? "bg-primary text-primary-foreground"
+                        : cn(tagColorClass(tag), "hover:opacity-80")
+                    )}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Select all row */}
+          {pickerFiltered.length > 0 && (
+            <div className="px-4 py-2 border-b border-border shrink-0 flex items-center justify-between">
+              <button
+                onClick={togglePickerAll}
+                className="flex items-center gap-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <div className={cn(
+                  "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                  pickerSelected.size === pickerFiltered.length
+                    ? "bg-primary border-primary"
+                    : "border-border"
+                )}>
+                  {pickerSelected.size === pickerFiltered.length && (
+                    <svg className="w-2.5 h-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none">
+                      <path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                Select all ({pickerFiltered.length})
+              </button>
+            </div>
+          )}
+
+          {/* Contact list */}
+          <div className="flex-1 overflow-y-auto">
+            {pickerFiltered.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground text-sm">
+                {pickerSearch ? "No contacts match your search" : "No contacts saved yet"}
+              </div>
+            ) : (
+              <div className="py-1">
+                {pickerFiltered.map((contact) => {
+                  const selected = pickerSelected.has(contact.id);
+                  return (
+                    <button
+                      key={contact.id}
+                      onClick={() => togglePickerContact(contact.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/40 transition-colors text-left",
+                        selected && "bg-primary/5"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                        selected ? "bg-primary border-primary" : "border-border"
+                      )}>
+                        {selected && (
+                          <svg className="w-2.5 h-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none">
+                            <path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-display font-semibold text-primary">
+                          {(contact.name || contact.email)[0].toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {contact.name && (
+                          <p className="text-sm font-medium truncate">{contact.name}</p>
+                        )}
+                        <p className={cn("truncate", contact.name ? "text-xs text-muted-foreground" : "text-sm")}>
+                          {contact.email}
+                        </p>
+                        {contact.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {contact.tags.map((tag) => (
+                              <span key={tag} className={cn("px-1.5 py-px rounded text-[10px] font-medium", tagColorClass(tag))}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-3 border-t border-border shrink-0 flex items-center justify-between gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setContactPickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={applyPickerSelection}
+              disabled={pickerSelected.size === 0}
+            >
+              Add {pickerSelected.size > 0 ? `${pickerSelected.size} ` : ""}Selected
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl w-full h-[80vh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
+            <DialogTitle className="font-display text-base font-semibold">Email Preview</DialogTitle>
+            {subject && (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Subject: <span className="text-foreground">{subject}</span>
+              </p>
+            )}
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden bg-white">
+            <iframe
+              key={previewOpen ? "open" : "closed"}
+              title="Email Preview"
+              className="w-full h-full border-0"
+              sandbox="allow-same-origin"
+              srcDoc={content || "<p style='color:#888;font-family:sans-serif;padding:2rem;font-size:14px'>No content to preview.</p>"}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
