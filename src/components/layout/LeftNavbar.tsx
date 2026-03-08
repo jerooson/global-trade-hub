@@ -6,7 +6,7 @@ import { useNavbar } from "@/hooks/useNavbar";
 
 const navItems = [
   { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/", icon: Package2, label: "Product Gallery" },
+  { path: "/product-gallery", icon: Package2, label: "Product Gallery" },
   { path: "/ai-studio", icon: Sparkles, label: "AI Studio" },
   { path: "/email-campaigns", icon: Mail, label: "Email Campaigns" },
 ];
@@ -15,10 +15,7 @@ export function LeftNavbar() {
   const location = useLocation();
   const { isCollapsed, setIsCollapsed } = useNavbar();
 
-  const isActive = (path: string) => {
-    if (path === "/") return location.pathname === "/";
-    return location.pathname.startsWith(path);
-  };
+  const isActive = (path: string) => location.pathname.startsWith(path);
 
   return (
     <aside
@@ -35,10 +32,10 @@ export function LeftNavbar() {
         {!isCollapsed && (
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div className="w-6 h-6 bg-primary rounded-sm flex items-center justify-center shrink-0">
-              <span className="font-display text-[10px] font-800 text-primary-foreground leading-none">G</span>
+              <span className="font-display text-[10px] font-extrabold text-primary-foreground leading-none">G</span>
             </div>
             <div className="min-w-0">
-              <p className="font-display text-xs font-700 tracking-[0.1em] uppercase text-foreground leading-none truncate">
+              <p className="font-display text-xs font-bold tracking-[0.1em] uppercase text-foreground leading-none truncate">
                 Global Trade
               </p>
               <p className="font-display text-[10px] tracking-[0.15em] uppercase text-muted-foreground leading-none mt-0.5">

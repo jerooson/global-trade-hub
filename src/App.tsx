@@ -54,9 +54,21 @@ const AppContent = () => {
         {/* Protected routes */}
         <Route
           path="/"
+          element={<Navigate to="/product-gallery" replace />}
+        />
+        <Route
+          path="/product-gallery"
           element={
             <ProtectedRoute>
               <Gallery />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/product-gallery/:productId"
+          element={
+            <ProtectedRoute>
+              <Workspace />
             </ProtectedRoute>
           }
         />
@@ -65,14 +77,6 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/workspace/:productId?"
-          element={
-            <ProtectedRoute>
-              <Workspace />
             </ProtectedRoute>
           }
         />
