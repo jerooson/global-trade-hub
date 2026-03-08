@@ -1,73 +1,129 @@
-# Welcome to your Lovable project
+# Global Trade Hub
 
-## Project info
+A B2B SaaS platform for global product sourcing and trade management. Connect with verified manufacturers, run AI-powered sourcing searches, manage your product gallery, and handle email campaigns — all in one place.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+**Frontend**
+- React 18 + TypeScript
+- Vite
+- Tailwind CSS + shadcn/ui
+- Syne + DM Sans (typography)
+- TanStack Query
 
-There are several ways of editing your application.
+**Backend**
+- Node.js + Express + TypeScript
+- LangChain (AI sourcing agent)
+- Firecrawl + Apify (web scraping)
+- Passport.js (JWT + OAuth authentication)
+- Resend (email delivery)
+- PostgreSQL
 
-**Use Lovable**
+## Project Structure
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+global-trade-hub/
+├── src/                    # Frontend (React)
+│   ├── components/
+│   │   ├── layout/         # LeftNavbar, TopHeader
+│   │   ├── sourcing/       # Sourcing page, chat, manufacturer cards
+│   │   ├── aiStudio/       # AI image generation UI
+│   │   ├── calculator/     # Price calculator
+│   │   ├── gallery/        # Product gallery
+│   │   └── ui/             # shadcn/ui components
+│   ├── pages/              # Route-level page components
+│   ├── hooks/              # Custom React hooks
+│   └── services/           # API client services
+├── backend/                # Backend (Express API)
+│   └── src/
+│       ├── routes/         # auth, sourcing, imageGeneration, email
+│       ├── services/       # langchain, firecrawl, apify, auth, email
+│       ├── models/         # TypeScript interfaces
+│       └── config/         # Environment config
+└── email-templates/        # HTML email templates
 ```
 
-**Edit a file directly in GitHub**
+## Getting Started
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Prerequisites
 
-**Use GitHub Codespaces**
+- Node.js 18+
+- PostgreSQL database
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### 1. Clone & install
 
-## What technologies are used for this project?
+```sh
+git clone https://github.com/jerooson/global-trade-hub.git
+cd global-trade-hub
 
-This project is built with:
+# Install frontend dependencies
+npm install
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Install backend dependencies
+cd backend && npm install && cd ..
+```
 
-## How can I deploy this project?
+### 2. Configure environment
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+```sh
+cp backend/.env.example backend/.env
+```
 
-## Can I connect a custom domain to my Lovable project?
+Edit `backend/.env` and fill in:
 
-Yes, you can!
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | Secret for signing JWT tokens |
+| `ANTHROPIC_API_KEY` | For AI sourcing agent |
+| `FIRECRAWL_API_KEY` | For web scraping |
+| `APIFY_API_KEY` | For manufacturer scraping |
+| `RESEND_API_KEY` | For email campaigns |
+| `FRONTEND_URL` | e.g. `http://localhost:8080` |
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### 3. Run development servers
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+In two separate terminals:
+
+```sh
+# Terminal 1 — Frontend (http://localhost:8080)
+npm run dev
+
+# Terminal 2 — Backend (http://localhost:3001)
+cd backend && npm run dev
+```
+
+## Pages
+
+| Route | Description |
+|---|---|
+| `/login` | Authentication |
+| `/dashboard` | Overview stats and quick actions |
+| `/` | Product gallery |
+| `/workspace/:productId` | Sourcing workspace with AI chat |
+| `/ai-studio` | AI image generation |
+| `/email-campaigns` | Email campaign management |
+
+## Backend API
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/auth/login` | Email/password login |
+| `POST /api/auth/register` | New user registration |
+| `POST /api/auth/refresh` | Refresh access token |
+| `POST /api/sourcing/search` | AI-powered manufacturer search |
+| `GET /api/sourcing/manufacturers` | Cached search results |
+| `POST /api/image/generate` | AI image generation |
+| `POST /api/email/send` | Send email campaigns |
+
+## Deployment
+
+```sh
+# Build frontend
+npm run build          # outputs to dist/
+
+# Build backend
+cd backend && npm run build && npm start
+```
+
+The frontend is deployed via GitHub Actions (see `.github/workflows/deploy.yml`).
