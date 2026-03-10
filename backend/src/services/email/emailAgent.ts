@@ -40,18 +40,25 @@ async function buildCampaignEmail({
       .map((p: string) => `<p style="margin:0 0 18px 0;font-size:15px;color:#333;line-height:1.7;">${p}</p>`)
       .join("");
 
-    // Product images — first image is hero, rest rendered as a grid
-    const imgs = image_urls || [];
-    const heroImage = imgs[0]
-      ? `<div style="margin-bottom:0;">
-          <img src="${imgs[0]}" alt="Product" width="600" style="width:100%;max-width:600px;height:auto;display:block;object-fit:cover;" />
-        </div>`
-      : "";
-    const gridImages = imgs.slice(1).length > 0
-      ? `<table width="100%" cellpadding="4" cellspacing="0" style="margin-bottom:24px;">
-          <tr>${imgs.slice(1, 4).map((url: string) => `
-            <td width="${Math.floor(100 / Math.min(imgs.slice(1).length, 3))}%" style="padding:4px;">
-              <img src="${url}" alt="Product" width="180" style="width:100%;height:160px;object-fit:cover;display:block;border-radius:4px;" />
+    // URL-encode image paths so non-ASCII filenames (e.g. Chinese chars) render correctly
+    const safeUrl = (url: string) => {
+      try {
+        const u = new URL(url);
+        u.pathname = u.pathname.split("/").map((seg) => {
+          try { return encodeURIComponent(decodeURIComponent(seg)); } catch { return seg; }
+        }).join("/");
+        return u.toString();
+      } catch { return url; }
+    };
+
+    // Product images — all shown in an equal-width grid (no separate "hero" image)
+    const imgs = (image_urls || []).map(safeUrl);
+    const heroImage = "";  // images shown in grid below instead
+    const gridImages = imgs.length > 0
+      ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border-collapse:collapse;">
+          <tr>${imgs.slice(0, 3).map((url: string) => `
+            <td width="${Math.floor(100 / Math.min(imgs.length, 3))}%" style="padding:3px;">
+              <img src="${url}" alt="Product" width="${Math.floor(600 / Math.min(imgs.length, 3))}" style="width:100%;height:220px;object-fit:cover;display:block;" />
             </td>`).join("")}
           </tr>
         </table>`
@@ -98,8 +105,8 @@ async function buildCampaignEmail({
     </a>
   </div>
 
-  <!-- ── HERO PRODUCT IMAGE ── -->
-  ${heroImage}
+  <!-- ── PRODUCT IMAGE GRID ── -->
+  ${gridImages}
 
   <!-- ── VALUE PROP BAND ── -->
   <div style="background:${sectionBg};padding:24px 32px;text-align:center;">
@@ -111,7 +118,6 @@ async function buildCampaignEmail({
   <!-- ── BODY ── -->
   <div style="background:${bodyBg};padding:36px 32px;">
     ${bodyBlocks}
-    ${gridImages}
     ${featureBlock}
   </div>
 
@@ -208,26 +214,36 @@ async function scrapeProductImages(pageUrl: string): Promise<string[]> {
 }
 
 async function resolveImageUrls(prompt: string, explicitImageUrls?: string[]): Promise<string[]> {
-  // Explicit image URLs from the UI take priority
-  const explicit = (explicitImageUrls ?? []).filter(Boolean);
-  if (explicit.length > 0) return explicit;
+  // Collect all candidate URLs: explicit UI input first, then URLs found in prompt text
+  const candidates = [
+    ...(explicitImageUrls ?? []).filter(Boolean),
+    ...extractUrlsFromText(prompt),
+  ].slice(0, 6); // max 6 candidates to avoid too many fetches
 
-  // Look for URLs in the prompt text
-  const urlsInPrompt = extractUrlsFromText(prompt);
+  if (candidates.length === 0) return [];
+
+  // Distribute image budget evenly: e.g. 2 URLs → 1-2 images each, 1 URL → up to 3 images
+  const perSource = Math.max(1, Math.floor(3 / candidates.length));
+
   const results: string[] = [];
+  const seen = new Set<string>();
 
-  for (const url of urlsInPrompt) {
-    if (isDirectImageUrl(url)) {
-      results.push(url);
-    } else {
-      // It's a webpage — try to scrape product images from it
-      const scraped = await scrapeProductImages(url);
-      results.push(...scraped);
-    }
+  for (const url of candidates) {
     if (results.length >= 3) break;
+    if (isDirectImageUrl(url)) {
+      if (!seen.has(url)) { results.push(url); seen.add(url); }
+    } else {
+      const scraped = await scrapeProductImages(url);
+      let added = 0;
+      // Skip images already seen from other pages (e.g. shared site thumbnails)
+      for (const img of scraped) {
+        if (added >= perSource || results.length >= 3) break;
+        if (!seen.has(img)) { results.push(img); seen.add(img); added++; }
+      }
+    }
   }
 
-  return [...new Set(results)].slice(0, 3);
+  return results.slice(0, 3);
 }
 
 // ── Campaign path: LLM extracts structured fields → template renders HTML ──────

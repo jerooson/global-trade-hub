@@ -178,9 +178,12 @@ export default function EmailCampaigns() {
   };
 
   const addAiImageUrl = () => {
-    const url = aiImageInput.trim();
-    if (!url || aiImageUrls.includes(url)) return;
-    setAiImageUrls((prev) => [...prev, url]);
+    const urls = aiImageInput
+      .split(/[\n,]+/)
+      .map((u) => u.trim())
+      .filter((u) => u && u.startsWith("http") && !aiImageUrls.includes(u));
+    if (urls.length === 0) return;
+    setAiImageUrls((prev) => [...prev, ...urls]);
     setAiImageInput("");
   };
 
@@ -529,34 +532,43 @@ export default function EmailCampaigns() {
 
                         {/* Image URLs row */}
                         <div className="px-3 py-2 border-b border-border bg-muted/10">
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-1.5">
-                            Product images (optional) — paste URLs to embed in campaign
-                          </p>
-                          <div className="flex gap-2">
-                            <input
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">
+                              Product pages or image URLs
+                            </p>
+                            <span className="text-[10px] text-muted-foreground/60">
+                              {aiImageUrls.length > 0 ? `${aiImageUrls.length} added` : "optional"}
+                            </span>
+                          </div>
+                          <div className="flex gap-2 items-start">
+                            <textarea
                               value={aiImageInput}
                               onChange={(e) => setAiImageInput(e.target.value)}
                               onKeyDown={(e) => {
-                                if (e.key === "Enter") { e.preventDefault(); addAiImageUrl(); }
+                                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addAiImageUrl(); }
                               }}
-                              placeholder="https://yoursite.com/product.jpg"
-                              className="flex-1 bg-background border border-border rounded px-2 py-1 text-xs outline-none focus:border-primary/50"
+                              placeholder={"Paste one or more URLs, one per line:\nhttps://yoursite.com/product-1/\nhttps://yoursite.com/product-2/"}
+                              rows={aiImageInput.split("\n").length > 1 ? Math.min(aiImageInput.split("\n").length + 1, 4) : 2}
+                              className="flex-1 bg-background border border-border rounded px-2 py-1.5 text-xs outline-none focus:border-primary/50 resize-none leading-relaxed"
                             />
                             <button
                               onClick={addAiImageUrl}
                               disabled={!aiImageInput.trim()}
-                              className="text-xs px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground disabled:opacity-40 transition-colors"
+                              className="text-xs px-2.5 py-1.5 rounded bg-muted hover:bg-muted/80 text-foreground disabled:opacity-40 transition-colors shrink-0"
                             >
                               <Plus className="w-3.5 h-3.5" />
                             </button>
                           </div>
+                          <p className="text-[10px] text-muted-foreground/50 mt-1">
+                            Product page URLs are supported — images will be extracted automatically
+                          </p>
                           {aiImageUrls.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              {aiImageUrls.map((url) => (
-                                <div key={url} className="flex items-center gap-1 bg-background border border-border rounded px-2 py-0.5 max-w-[200px]">
-                                  <img src={url} alt="" className="w-4 h-4 rounded object-cover shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                  <span className="text-[10px] text-muted-foreground truncate">{url.split("/").pop()}</span>
-                                  <button onClick={() => removeAiImageUrl(url)} className="text-muted-foreground hover:text-foreground shrink-0">
+                            <div className="flex flex-col gap-1 mt-2">
+                              {aiImageUrls.map((url, idx) => (
+                                <div key={url} className="flex items-center gap-2 bg-background border border-border rounded px-2 py-1">
+                                  <span className="text-[10px] text-muted-foreground/60 shrink-0 w-4 text-right">{idx + 1}</span>
+                                  <span className="text-[10px] text-muted-foreground truncate flex-1">{url}</span>
+                                  <button onClick={() => removeAiImageUrl(url)} className="text-muted-foreground hover:text-destructive shrink-0 transition-colors">
                                     <X className="w-3 h-3" />
                                   </button>
                                 </div>
