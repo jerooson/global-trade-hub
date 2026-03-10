@@ -1,13 +1,24 @@
 import { ChatAnthropic } from "@langchain/anthropic";
-import { tool } from "@langchain/core/tools";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { z } from "zod";
 import { config } from "../../config/env.js";
 
-// ── Campaign email tool ───────────────────────────────────────────────────────
+// ── Campaign email template ───────────────────────────────────────────────────
 
-const writeCampaignEmailTool = tool(
-  async ({
+interface CampaignEmailParams {
+  headline: string;
+  sub_headline?: string;
+  value_proposition: string;
+  body_paragraphs: string[];
+  feature_cards?: { icon: string; title: string; desc: string }[];
+  image_urls?: string[];
+  cta_text: string;
+  cta_url?: string;
+  sign_off_name?: string;
+  accent_color?: string;
+  dark_bg?: string;
+}
+
+async function buildCampaignEmail({
     headline,
     sub_headline,
     value_proposition,
@@ -19,7 +30,7 @@ const writeCampaignEmailTool = tool(
     sign_off_name,
     accent_color,
     dark_bg,
-  }) => {
+  }: CampaignEmailParams): Promise<string> {
     const accent = accent_color || "#f0a500";   // amber/gold default
     const heroBg = dark_bg || "#111111";         // near-black hero
     const sectionBg = "#1a1a1a";
@@ -121,33 +132,7 @@ const writeCampaignEmailTool = tool(
   </div>
 
 </div>`;
-  },
-  {
-    name: "write_campaign_email",
-    description:
-      "Generates a bold, professional marketing campaign email with dark hero, accent-color CTA, feature cards, and brand-quality layout. Use ONLY for promotional, marketing, or bulk outreach emails — NOT for personal or transactional emails.",
-    schema: z.object({
-      headline: z.string().describe("Punchy ALL-CAPS headline for the hero section"),
-      sub_headline: z.string().optional().describe("Optional supporting headline below the main headline"),
-      value_proposition: z.string().describe("Short, impactful value statement for the dark band below the hero"),
-      body_paragraphs: z.array(z.string()).describe("2-3 body paragraphs in the light section"),
-      feature_cards: z
-        .array(z.object({
-          icon: z.string().describe("Single emoji icon"),
-          title: z.string().describe("Card title (short, uppercase)"),
-          desc: z.string().describe("2-sentence card description"),
-        }))
-        .optional()
-        .describe("2-4 feature highlight cards shown in a grid"),
-      image_urls: z.array(z.string()).optional().describe("Product image URLs to embed — first is the full-width hero image, rest shown as a grid. Pass all URLs provided by the user."),
-      cta_text: z.string().describe("Call-to-action button label (e.g. 'Shop Now', 'Explore Products')"),
-      cta_url: z.string().optional().describe("URL for the CTA button"),
-      sign_off_name: z.string().optional().describe("Brand/sender name shown in footer"),
-      accent_color: z.string().optional().describe("Hex accent color matching the brand (e.g. '#f0a500' for amber, '#e63946' for red). Pick based on brand context."),
-      dark_bg: z.string().optional().describe("Hex color for the dark hero/footer background (default #111111)"),
-    }),
-  }
-);
+}
 
 // ── Routing helpers ────────────────────────────────────────────────────────────
 
@@ -308,7 +293,7 @@ ${resolvedImages.length > 0 ? `- Set image_urls to: ${JSON.stringify(resolvedIma
   if (resolvedImages.length > 0) {
     fields.image_urls = resolvedImages;
   }
-  return await writeCampaignEmailTool.func(fields);
+  return await buildCampaignEmail(fields as CampaignEmailParams);
 }
 
 // ── Personal email path: LLM writes HTML directly ──────────────────────────────
