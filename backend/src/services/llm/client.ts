@@ -27,19 +27,30 @@ class LLMClient {
   private anthropicClient?: any;
 
   constructor() {
-    // Determine which provider to use based on available API keys
-    if (config.groqApiKey) {
+    const forced = config.llmProvider as LLMProvider | undefined;
+
+    if (forced === "anthropic" && config.anthropicApiKey) {
+      this.provider = "anthropic";
+      console.log("✅ Using Anthropic (Claude) as LLM provider [LLM_PROVIDER override]");
+    } else if (forced === "openai" && config.openaiApiKey) {
+      this.provider = "openai";
+      this.openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
+      console.log("✅ Using OpenAI as LLM provider [LLM_PROVIDER override]");
+    } else if (forced === "groq" && config.groqApiKey) {
       this.provider = "groq";
       this.groqClient = new Groq({ apiKey: config.groqApiKey });
-      console.log("✅ Using Groq as LLM provider");
+      console.log("✅ Using Groq as LLM provider [LLM_PROVIDER override]");
+    } else if (config.anthropicApiKey) {
+      this.provider = "anthropic";
+      console.log("✅ Using Anthropic (Claude) as LLM provider");
     } else if (config.openaiApiKey) {
       this.provider = "openai";
       this.openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
       console.log("✅ Using OpenAI as LLM provider");
-    } else if (config.anthropicApiKey) {
-      this.provider = "anthropic";
-      // Anthropic will be initialized lazily when needed (lazy loading)
-      console.log("✅ Using Anthropic as LLM provider (will load SDK on first use)");
+    } else if (config.groqApiKey) {
+      this.provider = "groq";
+      this.groqClient = new Groq({ apiKey: config.groqApiKey });
+      console.log("✅ Using Groq as LLM provider");
     } else {
       throw new Error("No LLM API key configured. Please set GROQ_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY");
     }
@@ -161,7 +172,7 @@ class LLMClient {
     const conversationMessages = messages.filter(m => m.role !== "system");
 
     const response = await this.anthropicClient.messages.create({
-      model: options.model || "claude-3-5-haiku-20241022",
+      model: options.model || config.anthropicModel || "claude-3-7-sonnet-20250219",
       max_tokens: options.maxTokens,
       temperature: options.temperature,
       system: systemMessage || undefined,
