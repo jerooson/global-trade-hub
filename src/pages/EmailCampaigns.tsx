@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Mail, Send, Loader2, Plus, X, Eye,
   History, Users, PenSquare, Trash2, UserPlus,
+  Sparkles, RefreshCw, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,19 @@ export default function EmailCampaigns() {
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
 
+  // AI writer state
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiGenerated, setAiGenerated] = useState("");
+  const [aiTone, setAiTone] = useState("professional");
+  const [refineOpen, setRefineOpen] = useState(false);
+  const [refineInstruction, setRefineInstruction] = useState("");
+  const [refining, setRefining] = useState(false);
+  const [aiImageUrls, setAiImageUrls] = useState<string[]>([]);
+  const [aiImageInput, setAiImageInput] = useState("");
+  const aiPromptRef = useRef<HTMLInputElement>(null);
+
   // Contacts state
   const [contacts, setContacts] = useState<Contact[]>(loadContacts);
   const [newEmail, setNewEmail] = useState("");
@@ -139,6 +153,104 @@ export default function EmailCampaigns() {
     if (!content.trim()) return toast.error("Content is required");
     if (valid.length === 0) return toast.error("At least one recipient is required");
     sendEmailMutation.mutate({ subject, content, recipients: valid });
+  };
+
+  // ── AI Writer helpers ─────────────────────────────────────────────────────────
+  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+  const openAiWriter = () => {
+    setAiOpen(true);
+    setAiGenerated("");
+    setAiPrompt("");
+    setAiImageUrls([]);
+    setAiImageInput("");
+    setRefineOpen(false);
+    setTimeout(() => aiPromptRef.current?.focus(), 50);
+  };
+
+  const closeAiWriter = () => {
+    setAiOpen(false);
+    setAiGenerated("");
+    setAiPrompt("");
+    setAiImageUrls([]);
+    setAiImageInput("");
+    setRefineOpen(false);
+  };
+
+  const addAiImageUrl = () => {
+    const url = aiImageInput.trim();
+    if (!url || aiImageUrls.includes(url)) return;
+    setAiImageUrls((prev) => [...prev, url]);
+    setAiImageInput("");
+  };
+
+  const removeAiImageUrl = (url: string) =>
+    setAiImageUrls((prev) => prev.filter((u) => u !== url));
+
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    // Detect "/" typed alone or as the last character on a new line
+    if (val === "/" || val.endsWith("\n/")) {
+      setContent(val === "/" ? "" : val.slice(0, -1));
+      openAiWriter();
+    } else {
+      setContent(val);
+    }
+  };
+
+  const generateContent = async () => {
+    if (!aiPrompt.trim()) return;
+    setAiGenerating(true);
+    setAiGenerated("");
+    try {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(`${API_BASE}/api/email/generate-content`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ prompt: aiPrompt, subject, tone: aiTone, imageUrls: aiImageUrls }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setAiGenerated(data.content);
+    } catch {
+      toast.error("Failed to generate content — is the backend running?");
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const refineContent = async () => {
+    if (!aiGenerated.trim() || !refineInstruction.trim()) return;
+    setRefining(true);
+    try {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(`${API_BASE}/api/email/refine-content`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: aiGenerated, instruction: refineInstruction }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setAiGenerated(data.content);
+      setRefineInstruction("");
+      setRefineOpen(false);
+    } catch {
+      toast.error("Failed to refine content");
+    } finally {
+      setRefining(false);
+    }
+  };
+
+  const insertAiContent = () => {
+    setContent(aiGenerated);
+    closeAiWriter();
+    toast.success("AI content inserted");
   };
 
   // ── Contact helpers ──────────────────────────────────────────────────────────
@@ -342,25 +454,208 @@ export default function EmailCampaigns() {
 
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium">Content (HTML)</label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPreviewOpen(true)}
-                        disabled={!content.trim()}
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1.5" />
-                        Preview
-                      </Button>
+                      <label className="text-sm font-medium flex items-center gap-2">
+                        Content (HTML)
+                        <span className="text-[10px] text-muted-foreground font-normal border border-border rounded px-1 py-0.5 font-mono">
+                          / for AI
+                        </span>
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={openAiWriter}
+                          className="gap-1.5 text-primary border-primary/30 hover:bg-primary/5"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          AI Write
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPreviewOpen(true)}
+                          disabled={!content.trim()}
+                        >
+                          <Eye className="w-3.5 h-3.5 mr-1.5" />
+                          Preview
+                        </Button>
+                      </div>
                     </div>
+
                     <Textarea
-                      placeholder="Email content (HTML supported)..."
+                      placeholder={"Write your HTML email content here...\n\nTip: Type  /  to open the AI writing assistant"}
                       value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      rows={8}
-                      className="font-mono text-sm"
+                      onChange={handleContentChange}
+                      rows={aiOpen ? 4 : 8}
+                      className="font-mono text-sm transition-all"
                     />
+
+                    {/* ── AI Writer Panel ── */}
+                    {aiOpen && (
+                      <div className="mt-2 border border-primary/30 rounded-lg bg-card shadow-lg overflow-hidden animate-fade-up">
+
+                        {/* Prompt row */}
+                        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
+                          <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                          <input
+                            ref={aiPromptRef}
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey && !aiGenerating) {
+                                e.preventDefault();
+                                generateContent();
+                              }
+                              if (e.key === "Escape") closeAiWriter();
+                            }}
+                            placeholder="Describe the email you want to write…"
+                            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                          />
+                          {/* Tone selector */}
+                          <select
+                            value={aiTone}
+                            onChange={(e) => setAiTone(e.target.value)}
+                            className="text-xs bg-muted border border-border rounded px-2 py-1 text-muted-foreground outline-none cursor-pointer"
+                          >
+                            <option value="professional">Professional</option>
+                            <option value="friendly">Friendly</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="formal">Formal</option>
+                            <option value="casual">Casual</option>
+                          </select>
+                        </div>
+
+                        {/* Image URLs row */}
+                        <div className="px-3 py-2 border-b border-border bg-muted/10">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-1.5">
+                            Product images (optional) — paste URLs to embed in campaign
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              value={aiImageInput}
+                              onChange={(e) => setAiImageInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") { e.preventDefault(); addAiImageUrl(); }
+                              }}
+                              placeholder="https://yoursite.com/product.jpg"
+                              className="flex-1 bg-background border border-border rounded px-2 py-1 text-xs outline-none focus:border-primary/50"
+                            />
+                            <button
+                              onClick={addAiImageUrl}
+                              disabled={!aiImageInput.trim()}
+                              className="text-xs px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground disabled:opacity-40 transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {aiImageUrls.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {aiImageUrls.map((url) => (
+                                <div key={url} className="flex items-center gap-1 bg-background border border-border rounded px-2 py-0.5 max-w-[200px]">
+                                  <img src={url} alt="" className="w-4 h-4 rounded object-cover shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                  <span className="text-[10px] text-muted-foreground truncate">{url.split("/").pop()}</span>
+                                  <button onClick={() => removeAiImageUrl(url)} className="text-muted-foreground hover:text-foreground shrink-0">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Generated content preview */}
+                        {aiGenerated && (
+                          <div className="border-b border-border">
+                            <div className="px-3 py-2 bg-muted/30 flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground truncate max-w-xs italic">"{aiPrompt}"</span>
+                              <span className="text-[10px] text-primary font-medium">Generated</span>
+                            </div>
+                            {aiGenerated.trimStart().startsWith("<") ? (
+                              <div
+                                className="px-4 py-3 max-h-52 overflow-y-auto text-sm text-foreground/80 prose prose-sm dark:prose-invert max-w-none"
+                                dangerouslySetInnerHTML={{ __html: aiGenerated }}
+                              />
+                            ) : (
+                              <pre
+                                className="px-4 py-3 max-h-52 overflow-y-auto text-sm text-foreground/80 whitespace-pre-wrap font-sans"
+                              >
+                                {aiGenerated}
+                              </pre>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Refine row */}
+                        {refineOpen && aiGenerated && (
+                          <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/20">
+                            <input
+                              autoFocus
+                              value={refineInstruction}
+                              onChange={(e) => setRefineInstruction(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") refineContent();
+                                if (e.key === "Escape") setRefineOpen(false);
+                              }}
+                              placeholder="How should I refine it? (e.g. make it shorter, more urgent…)"
+                              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                            />
+                            <Button size="sm" onClick={refineContent} disabled={refining || !refineInstruction.trim()}>
+                              {refining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply"}
+                            </Button>
+                            <button onClick={() => setRefineOpen(false)} className="text-muted-foreground hover:text-foreground">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Action bar */}
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={closeAiWriter}
+                              className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            {aiGenerated && (
+                              <>
+                                <button
+                                  onClick={generateContent}
+                                  disabled={aiGenerating}
+                                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors"
+                                >
+                                  <RefreshCw className={cn("w-3 h-3", aiGenerating && "animate-spin")} />
+                                  Recreate
+                                </button>
+                                <button
+                                  onClick={() => setRefineOpen((v) => !v)}
+                                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors"
+                                >
+                                  Refine
+                                  <ChevronDown className="w-3 h-3" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={aiGenerated ? insertAiContent : generateContent}
+                            disabled={aiGenerating || (!aiGenerated && !aiPrompt.trim())}
+                            className="gap-1.5"
+                          >
+                            {aiGenerating ? (
+                              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</>
+                            ) : aiGenerated ? (
+                              "Insert"
+                            ) : (
+                              <><Sparkles className="w-3.5 h-3.5" /> Create</>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -883,7 +1178,21 @@ export default function EmailCampaigns() {
               title="Email Preview"
               className="w-full h-full border-0"
               sandbox="allow-same-origin"
-              srcDoc={content || "<p style='color:#888;font-family:sans-serif;padding:2rem;font-size:14px'>No content to preview.</p>"}
+              srcDoc={
+                content
+                  ? content.trimStart().startsWith("<")
+                    ? content
+                    : (() => {
+                        const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+                        return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#333;line-height:1.7;">${
+                          normalized
+                            .split(/\n\n+/)
+                            .map((p) => `<p style="margin:0 0 1em 0;">${p.replace(/\n/g, "<br>")}</p>`)
+                            .join("")
+                        }</div>`;
+                      })()
+                  : "<p style='color:#888;font-family:sans-serif;padding:2rem;font-size:14px'>No content to preview.</p>"
+              }
             />
           </div>
         </DialogContent>

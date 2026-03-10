@@ -3,6 +3,10 @@ import { body, validationResult } from "express-validator";
 import { emailService, EmailRecipient } from "../services/email/resendService.js";
 import { pool } from "../db/connection.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { config } from "../config/env.js";
+import { runEmailAgent } from "../services/email/emailAgent.js";
 
 const router = Router();
 
@@ -47,10 +51,23 @@ router.post(
         );
       }
 
+      // Convert plain text to HTML if content isn't already HTML
+      const htmlBody = content.trimStart().startsWith("<")
+        ? content
+        : (() => {
+            const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+            return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#333;line-height:1.7;">${
+              normalized
+                .split(/\n\n+/)
+                .map((para) => `<p style="margin:0 0 1em 0;">${para.replace(/\n/g, "<br>")}</p>`)
+                .join("")
+            }</div>`;
+          })();
+
       const result = await emailService.sendBulkEmails({
         to: recipients,
         subject,
-        html: content,
+        html: htmlBody,
       });
 
       for (const emailResult of result.results) {
@@ -154,6 +171,87 @@ router.get(
       console.error("Failed to fetch campaign details:", error);
       res.status(500).json({
         error: "Failed to fetch campaign details",
+        message: error.message,
+      });
+    }
+  }
+);
+
+function stripMarkdownFence(text: string): string {
+  return text
+    .replace(/^```[a-z]*\n?/i, "")
+    .replace(/\n?```$/i, "")
+    .trim();
+}
+
+function getAnthropicLLM(temperature = 0.7) {
+  return new ChatAnthropic({
+    modelName: config.anthropicModel || "claude-haiku-4-5-20251001",
+    temperature,
+    anthropicApiKey: config.anthropicApiKey,
+    maxTokens: 2000,
+  });
+}
+
+router.post(
+  "/generate-content",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const { prompt, subject, tone, imageUrls } = req.body as {
+      prompt: string;
+      subject?: string;
+      tone?: string;
+      imageUrls?: string[];
+    };
+
+    if (!prompt?.trim()) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
+
+    try {
+      const content = await runEmailAgent({ prompt, subject, tone, imageUrls });
+      res.json({ content });
+    } catch (error: any) {
+      console.error("Failed to generate email content:", error);
+      res.status(500).json({
+        error: "Failed to generate content",
+        message: error.message,
+      });
+    }
+  }
+);
+
+router.post(
+  "/refine-content",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const { content, instruction } = req.body as {
+      content: string;
+      instruction: string;
+    };
+
+    if (!content?.trim() || !instruction?.trim()) {
+      return res.status(400).json({ error: "Content and instruction are required" });
+    }
+
+    try {
+      const llm = getAnthropicLLM(0.6);
+
+      const response = await llm.invoke([
+        new SystemMessage(
+          `You are an expert email copywriter. Refine the given HTML email content based on the user's instruction.
+Output ONLY the refined HTML body content — no <html>, <head>, or <body> tags. Keep all inline CSS styles intact.`
+        ),
+        new HumanMessage(
+          `Original email HTML:\n${content}\n\nRefinement instruction: ${instruction}`
+        ),
+      ]);
+
+      res.json({ content: stripMarkdownFence(response.content as string) });
+    } catch (error: any) {
+      console.error("Failed to refine email content:", error);
+      res.status(500).json({
+        error: "Failed to refine content",
         message: error.message,
       });
     }

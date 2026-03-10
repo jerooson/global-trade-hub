@@ -30,9 +30,11 @@ export const config = {
   emailFrom: process.env.EMAIL_FROM || "TradeHub <noreply@tradehub.com>",
   
   // LLM Configuration
+  llmProvider: process.env.LLM_PROVIDER, // explicit override: "groq" | "openai" | "anthropic"
   groqApiKey: process.env.GROQ_API_KEY,
   openaiApiKey: process.env.OPENAI_API_KEY,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  anthropicModel: process.env.ANTHROPIC_MODEL, // e.g. claude-3-7-sonnet-20250219
   
   // Firecrawl Configuration
   firecrawlApiKey: process.env.FIRECRAWL_API_KEY || "",
