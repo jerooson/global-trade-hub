@@ -55,6 +55,21 @@ export class ResendEmailService {
     }
   }
 
+  /**
+   * Replace personalization variables in the email content/subject
+   * Supported variables: {{name}}, {{email}}
+   * If name is empty, {{name}} falls back to "there" (e.g. "Dear there")
+   */
+  private personalize(text: string, recipient: EmailRecipient): string {
+    const firstName = (recipient.name?.trim().split(/\s+/)[0]) || "there";
+    const fullName = recipient.name?.trim() || "there";
+    return text
+      .replace(/\{\{\s*name\s*\}\}/gi, fullName)
+      .replace(/\{\{\s*firstName\s*\}\}/gi, firstName)
+      .replace(/\{\{\s*first_name\s*\}\}/gi, firstName)
+      .replace(/\{\{\s*email\s*\}\}/gi, recipient.email);
+  }
+
   async sendBulkEmails(params: SendEmailParams): Promise<BulkEmailResult> {
     const results: Array<{
       email: string;
@@ -67,10 +82,14 @@ export class ResendEmailService {
     let failedCount = 0;
 
     for (const recipient of params.to) {
+      // Personalize subject and html for this specific recipient
+      const personalizedSubject = this.personalize(params.subject, recipient);
+      const personalizedHtml = this.personalize(params.html, recipient);
+
       const result = await this.sendSingleEmail({
         to: [recipient],
-        subject: params.subject,
-        html: params.html,
+        subject: personalizedSubject,
+        html: personalizedHtml,
         from: params.from,
       });
 
