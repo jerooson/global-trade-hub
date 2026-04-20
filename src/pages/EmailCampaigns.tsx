@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Mail, Send, Loader2, Plus, X, Eye,
@@ -13,20 +13,19 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { sendBulkEmail, getCampaigns, EmailRecipient } from "@/services/emailApi";
+import {
+  getContacts,
+  createContact,
+  bulkImportContacts,
+  deleteContact,
+  Contact,
+} from "@/services/contactsApi";
 import { LeftNavbar } from "@/components/layout/LeftNavbar";
 import { TopHeader } from "@/components/layout/TopHeader";
 import { useNavbar } from "@/hooks/useNavbar";
 import { cn } from "@/lib/utils";
 
 type Tab = "compose" | "history" | "contacts";
-
-interface Contact {
-  id: string;
-  email: string;
-  name: string;
-  tags: string[];
-  addedAt: string;
-}
 
 function parseTags(raw: string): string[] {
   return raw.split(/[,|]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
@@ -46,19 +45,8 @@ function tagColorClass(tag: string | undefined): string {
   return palette[idx];
 }
 
-function loadContacts(): Contact[] {
-  try {
-    const raw: Contact[] = JSON.parse(localStorage.getItem("gth_contacts") || "[]");
-    // Migrate contacts saved before `tags` was added
-    return raw.map((c) => ({ ...c, tags: c.tags ?? [] }));
-  } catch {
-    return [];
-  }
-}
-
-function saveContacts(contacts: Contact[]) {
-  localStorage.setItem("gth_contacts", JSON.stringify(contacts));
-}
+const LOCAL_STORAGE_KEY = "gth_contacts";
+const MIGRATION_DONE_KEY = "gth_contacts_migrated_v1";
 
 export default function EmailCampaigns() {
   const queryClient = useQueryClient();
@@ -69,7 +57,6 @@ export default function EmailCampaigns() {
   const [subject, setSubject] = useState("");
   const [content, setContent] = useState("");
   const [recipients, setRecipients] = useState<EmailRecipient[]>([{ email: "", name: "" }]);
-  const [bulkEmails, setBulkEmails] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
@@ -88,8 +75,87 @@ export default function EmailCampaigns() {
   const [aiImageInput, setAiImageInput] = useState("");
   const aiPromptRef = useRef<HTMLInputElement>(null);
 
-  // Contacts state
-  const [contacts, setContacts] = useState<Contact[]>(loadContacts);
+  // Contacts state (backed by API)
+  const { data: contacts = [], isLoading: loadingContacts } = useQuery({
+    queryKey: ["contacts"],
+    queryFn: getContacts,
+  });
+
+  const invalidateContacts = () =>
+    queryClient.invalidateQueries({ queryKey: ["contacts"] });
+
+  const createContactMutation = useMutation({
+    mutationFn: createContact,
+    onSuccess: () => {
+      invalidateContacts();
+      toast.success("Contact added");
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to add contact"),
+  });
+
+  const bulkImportMutation = useMutation({
+    mutationFn: bulkImportContacts,
+    onSuccess: (data) => {
+      invalidateContacts();
+      const msg =
+        data.skippedCount > 0
+          ? `Imported ${data.insertedCount} contacts (${data.skippedCount} duplicates skipped)`
+          : `Imported ${data.insertedCount} contacts`;
+      toast.success(msg);
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to import contacts"),
+  });
+
+  const deleteContactMutation = useMutation({
+    mutationFn: deleteContact,
+    onSuccess: () => {
+      invalidateContacts();
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to delete contact"),
+  });
+
+  // One-time localStorage -> database migration
+  useEffect(() => {
+    if (localStorage.getItem(MIGRATION_DONE_KEY)) return;
+    try {
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (!raw) {
+        localStorage.setItem(MIGRATION_DONE_KEY, "1");
+        return;
+      }
+      const legacy = JSON.parse(raw) as Array<{
+        email: string;
+        name?: string;
+        tags?: string[];
+      }>;
+      if (!Array.isArray(legacy) || legacy.length === 0) {
+        localStorage.setItem(MIGRATION_DONE_KEY, "1");
+        return;
+      }
+      bulkImportContacts(
+        legacy.map((c) => ({
+          email: c.email,
+          name: c.name || "",
+          tags: c.tags || [],
+        }))
+      )
+        .then((res) => {
+          localStorage.setItem(MIGRATION_DONE_KEY, "1");
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+          invalidateContacts();
+          if (res.insertedCount > 0) {
+            toast.success(`Migrated ${res.insertedCount} contacts to your account`);
+          }
+        })
+        .catch(() => {
+          // Silently fail; will retry on next load
+        });
+    } catch {
+      localStorage.setItem(MIGRATION_DONE_KEY, "1");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
   const [newTagInput, setNewTagInput] = useState("");
@@ -111,7 +177,6 @@ export default function EmailCampaigns() {
       setSubject("");
       setContent("");
       setRecipients([{ email: "", name: "" }]);
-      setBulkEmails("");
       queryClient.invalidateQueries({ queryKey: ["email-campaigns"] });
     },
     onError: (error: Error) => {
@@ -131,20 +196,6 @@ export default function EmailCampaigns() {
     const updated = [...recipients];
     updated[index][field] = value;
     setRecipients(updated);
-  };
-
-  const parseBulkEmails = () => {
-    const lines = bulkEmails.split("\n").filter((l) => l.trim());
-    const parsed: EmailRecipient[] = lines.map((line) => {
-      if (line.includes(",")) {
-        const [email, name] = line.split(",").map((s) => s.trim());
-        return { email, name };
-      }
-      return { email: line.trim() };
-    });
-    setRecipients(parsed);
-    setBulkEmails("");
-    toast.success(`Added ${parsed.length} recipients`);
   };
 
   const handleSend = () => {
@@ -258,25 +309,26 @@ export default function EmailCampaigns() {
 
   // ── Contact helpers ──────────────────────────────────────────────────────────
   const addContact = () => {
-    if (!newEmail.trim()) return toast.error("Email is required");
-    if (contacts.some((c) => c.email === newEmail.trim()))
+    const email = newEmail.trim().toLowerCase();
+    if (!email) return toast.error("Email is required");
+    if (contacts.some((c) => c.email === email))
       return toast.error("Contact already exists");
     // Flush any pending tag input
     const pendingTag = newTagInput.trim().toLowerCase();
     const finalTags = pendingTag && !newTags.includes(pendingTag)
       ? [...newTags, pendingTag]
       : newTags;
-    const updated = [
-      ...contacts,
-      { id: crypto.randomUUID(), email: newEmail.trim(), name: newName.trim(), tags: finalTags, addedAt: new Date().toISOString() },
-    ];
-    setContacts(updated);
-    saveContacts(updated);
-    setNewEmail("");
-    setNewName("");
-    setNewTags([]);
-    setNewTagInput("");
-    toast.success("Contact added");
+    createContactMutation.mutate(
+      { email, name: newName.trim(), tags: finalTags },
+      {
+        onSuccess: () => {
+          setNewEmail("");
+          setNewName("");
+          setNewTags([]);
+          setNewTagInput("");
+        },
+      }
+    );
   };
 
   const addTagChip = () => {
@@ -290,30 +342,28 @@ export default function EmailCampaigns() {
     setNewTags(newTags.filter((t) => t !== tag));
 
   const removeContact = (id: string) => {
-    const updated = contacts.filter((c) => c.id !== id);
-    setContacts(updated);
-    saveContacts(updated);
+    deleteContactMutation.mutate(id);
   };
 
   const importBulkContacts = () => {
     const lines = bulkContactImport.split("\n").filter((l) => l.trim());
-    const existing = new Set(contacts.map((c) => c.email));
-    const newContacts: Contact[] = [];
+    const toImport: { email: string; name: string; tags: string[] }[] = [];
     for (const line of lines) {
       const parts = line.split(",").map((s) => s.trim());
       const email = parts[0];
       const name = parts[1] || "";
       const tags = parts[2] ? parseTags(parts[2]) : [];
-      if (email && !existing.has(email)) {
-        newContacts.push({ id: crypto.randomUUID(), email, name, tags, addedAt: new Date().toISOString() });
-        existing.add(email);
+      if (email) {
+        toImport.push({ email: email.toLowerCase(), name, tags });
       }
     }
-    const updated = [...contacts, ...newContacts];
-    setContacts(updated);
-    saveContacts(updated);
-    setBulkContactImport("");
-    toast.success(`Imported ${newContacts.length} contacts`);
+    if (toImport.length === 0) {
+      toast.error("No valid contacts found");
+      return;
+    }
+    bulkImportMutation.mutate(toImport, {
+      onSuccess: () => setBulkContactImport(""),
+    });
   };
 
   const useContactsInCampaign = () => {
@@ -461,6 +511,9 @@ export default function EmailCampaigns() {
                         Content (HTML)
                         <span className="text-[10px] text-muted-foreground font-normal border border-border rounded px-1 py-0.5 font-mono">
                           / for AI
+                        </span>
+                        <span className="text-[10px] text-primary/80 font-normal border border-primary/30 rounded px-1 py-0.5 font-mono bg-primary/5">
+                          {"{{firstName}}"} for personalization
                         </span>
                       </label>
                       <div className="flex items-center gap-2">
@@ -696,55 +749,72 @@ export default function EmailCampaigns() {
                         </Button>
                       </div>
                     </div>
-                    <div className="space-y-2 max-h-48 overflow-y-auto p-1 -mx-1">
-                      {recipients.map((recipient, index) => (
-                        <div key={index} className="flex gap-2">
-                          <Input
-                            placeholder="email@example.com"
-                            value={recipient.email}
-                            onChange={(e) => updateRecipient(index, "email", e.target.value)}
-                            className="flex-1"
-                          />
-                          <Input
-                            placeholder="Name (optional)"
-                            value={recipient.name || ""}
-                            onChange={(e) => updateRecipient(index, "name", e.target.value)}
-                            className="flex-1"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeRecipient(index)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
 
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">
-                      Bulk Import <span className="text-muted-foreground font-normal">(one per line: email or email, name)</span>
-                    </label>
-                    <Textarea
-                      placeholder={"user@example.com\njohn@example.com,John Doe"}
-                      value={bulkEmails}
-                      onChange={(e) => setBulkEmails(e.target.value)}
-                      rows={3}
-                      className="font-mono text-sm"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={parseBulkEmails}
-                      disabled={!bulkEmails.trim()}
-                      className="mt-2"
-                    >
-                      Parse Emails
-                    </Button>
+                    {/* Column labels */}
+                    <div className="flex gap-2 mb-1.5 px-1">
+                      <div className="flex-1">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">
+                          Email
+                        </p>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium flex items-center gap-1.5">
+                          Name
+                          <span className="text-[10px] normal-case text-primary/70 font-mono font-normal border border-primary/20 rounded px-1 bg-primary/5">
+                            used for {"{{firstName}}"}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="w-10" />
+                    </div>
+
+                    <div className="space-y-2 max-h-48 overflow-y-auto p-1 -mx-1">
+                      {recipients.map((recipient, index) => {
+                        const firstName = recipient.name?.trim().split(/\s+/)[0];
+                        return (
+                          <div key={index} className="flex gap-2">
+                            <Input
+                              placeholder="email@example.com"
+                              value={recipient.email}
+                              onChange={(e) => updateRecipient(index, "email", e.target.value)}
+                              className="flex-1"
+                            />
+                            <div className="flex-1 relative">
+                              <Input
+                                placeholder="John Smith"
+                                value={recipient.name || ""}
+                                onChange={(e) => updateRecipient(index, "name", e.target.value)}
+                                className="w-full pr-20"
+                              />
+                              {firstName && (
+                                <span
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-primary/70 font-mono bg-primary/5 border border-primary/20 rounded px-1.5 py-0.5 pointer-events-none"
+                                  title={`Will be used as {{firstName}} → ${firstName}`}
+                                >
+                                  → {firstName}
+                                </span>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeRecipient(index)}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Helper hint */}
+                    {content.includes("{{") && (
+                      <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3 text-primary/60" />
+                        Your content uses personalization. Each recipient's <span className="text-foreground font-medium">Name</span> field will replace <span className="font-mono text-primary/80">{"{{firstName}}"}</span> in their email.
+                      </p>
+                    )}
                   </div>
 
                   <Button onClick={handleSend} disabled={sendEmailMutation.isPending} className="w-full">
@@ -882,8 +952,16 @@ export default function EmailCampaigns() {
                       </div>
                     </div>
 
-                    <Button onClick={addContact} disabled={!newEmail.trim()} className="w-full">
-                      <UserPlus className="w-4 h-4 mr-2" />
+                    <Button
+                      onClick={addContact}
+                      disabled={!newEmail.trim() || createContactMutation.isPending}
+                      className="w-full"
+                    >
+                      {createContactMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <UserPlus className="w-4 h-4 mr-2" />
+                      )}
                       Add Contact
                     </Button>
 
@@ -903,9 +981,12 @@ export default function EmailCampaigns() {
                         variant="outline"
                         size="sm"
                         onClick={importBulkContacts}
-                        disabled={!bulkContactImport.trim()}
+                        disabled={!bulkContactImport.trim() || bulkImportMutation.isPending}
                         className="mt-2"
                       >
+                        {bulkImportMutation.isPending && (
+                          <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                        )}
                         Import Contacts
                       </Button>
                     </div>
@@ -967,7 +1048,12 @@ export default function EmailCampaigns() {
                         )}
                       </div>
                     )}
-                    {contacts.length === 0 ? (
+                    {loadingContacts ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Loader2 className="w-6 h-6 mx-auto mb-3 animate-spin opacity-50" />
+                        <p className="text-sm">Loading contacts...</p>
+                      </div>
+                    ) : contacts.length === 0 ? (
                       <div className="text-center py-12 text-muted-foreground">
                         <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
                         <p className="text-sm">No contacts yet</p>
@@ -1178,34 +1264,66 @@ export default function EmailCampaigns() {
         <DialogContent className="max-w-3xl w-full h-[80vh] flex flex-col gap-0 p-0 overflow-hidden">
           <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
             <DialogTitle className="font-display text-base font-semibold">Email Preview</DialogTitle>
-            {subject && (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Subject: <span className="text-foreground">{subject}</span>
-              </p>
-            )}
+            {(() => {
+              const firstRecipient = recipients.find((r) => r.email.trim());
+              const previewName = firstRecipient?.name?.trim() || "there";
+              const firstName = previewName.split(/\s+/)[0];
+              const personalize = (text: string) =>
+                text
+                  .replace(/\{\{\s*name\s*\}\}/gi, previewName)
+                  .replace(/\{\{\s*firstName\s*\}\}/gi, firstName)
+                  .replace(/\{\{\s*first_name\s*\}\}/gi, firstName)
+                  .replace(/\{\{\s*email\s*\}\}/gi, firstRecipient?.email || "you@example.com");
+              return subject ? (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Subject: <span className="text-foreground">{personalize(subject)}</span>
+                  {firstRecipient?.name && (
+                    <span className="ml-2 text-[10px] text-primary/80">
+                      (Previewing as: {firstRecipient.name})
+                    </span>
+                  )}
+                </p>
+              ) : null;
+            })()}
           </DialogHeader>
           <div className="flex-1 overflow-hidden bg-white">
-            <iframe
-              key={previewOpen ? "open" : "closed"}
-              title="Email Preview"
-              className="w-full h-full border-0"
-              sandbox="allow-same-origin"
-              srcDoc={
-                content
-                  ? content.trimStart().startsWith("<")
-                    ? content
-                    : (() => {
-                        const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-                        return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#333;line-height:1.7;">${
-                          normalized
-                            .split(/\n\n+/)
-                            .map((p) => `<p style="margin:0 0 1em 0;">${p.replace(/\n/g, "<br>")}</p>`)
-                            .join("")
-                        }</div>`;
-                      })()
-                  : "<p style='color:#888;font-family:sans-serif;padding:2rem;font-size:14px'>No content to preview.</p>"
-              }
-            />
+            {(() => {
+              const firstRecipient = recipients.find((r) => r.email.trim());
+              const previewName = firstRecipient?.name?.trim() || "there";
+              const firstName = previewName.split(/\s+/)[0];
+              const personalize = (text: string) =>
+                text
+                  .replace(/\{\{\s*name\s*\}\}/gi, previewName)
+                  .replace(/\{\{\s*firstName\s*\}\}/gi, firstName)
+                  .replace(/\{\{\s*first_name\s*\}\}/gi, firstName)
+                  .replace(/\{\{\s*email\s*\}\}/gi, firstRecipient?.email || "you@example.com");
+
+              const personalizedContent = content ? personalize(content) : "";
+
+              return (
+                <iframe
+                  key={previewOpen ? "open" : "closed"}
+                  title="Email Preview"
+                  className="w-full h-full border-0"
+                  sandbox="allow-same-origin"
+                  srcDoc={
+                    personalizedContent
+                      ? personalizedContent.trimStart().startsWith("<")
+                        ? personalizedContent
+                        : (() => {
+                            const normalized = personalizedContent.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+                            return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#333;line-height:1.7;">${
+                              normalized
+                                .split(/\n\n+/)
+                                .map((p) => `<p style="margin:0 0 1em 0;">${p.replace(/\n/g, "<br>")}</p>`)
+                                .join("")
+                            }</div>`;
+                          })()
+                      : "<p style='color:#888;font-family:sans-serif;padding:2rem;font-size:14px'>No content to preview.</p>"
+                  }
+                />
+              );
+            })()}
           </div>
         </DialogContent>
       </Dialog>

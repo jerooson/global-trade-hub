@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.js";
 import sourcingRoutes from "./routes/sourcing.js";
 import imageGenerationRoutes from "./routes/imageGeneration.js";
 import emailRoutes from "./routes/email.js";
+import contactsRoutes from "./routes/contacts.js";
 
 const app = express();
 
@@ -76,6 +77,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/sourcing", sourcingRoutes);
 app.use("/api/image", imageGenerationRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/contacts", contactsRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -100,5 +102,6 @@ app.listen(PORT, () => {
   console.log(`🔍 Sourcing API: http://localhost:${PORT}/api/sourcing`);
   console.log(`🎨 Image Generation API: http://localhost:${PORT}/api/image`);
   console.log(`📧 Email API: http://localhost:${PORT}/api/email`);
+  console.log(`👥 Contacts API: http://localhost:${PORT}/api/contacts`);
 });
 
