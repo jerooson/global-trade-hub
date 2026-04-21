@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Mail, Send, Loader2, Plus, X, Eye,
   History, Users, PenSquare, Trash2, UserPlus,
-  Sparkles, RefreshCw, ChevronDown,
+  Sparkles, RefreshCw, ChevronDown, ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +61,15 @@ export default function EmailCampaigns() {
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  // Image insert dialog state
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [imgUrl, setImgUrl] = useState("");
+  const [imgAlt, setImgAlt] = useState("");
+  const [imgWidth, setImgWidth] = useState("600");
+  const [imgAlign, setImgAlign] = useState<"left" | "center" | "right">("center");
+  const [imgLink, setImgLink] = useState("");
 
   // AI writer state
   const [aiOpen, setAiOpen] = useState(false);
@@ -250,6 +259,54 @@ export default function EmailCampaigns() {
     } else {
       setContent(val);
     }
+  };
+
+  // ── Image insert helpers ────────────────────────────────────────────────
+  const openImageDialog = () => {
+    setImgUrl("");
+    setImgAlt("");
+    setImgWidth("600");
+    setImgAlign("center");
+    setImgLink("");
+    setImageDialogOpen(true);
+  };
+
+  const insertImageTag = () => {
+    const url = imgUrl.trim();
+    if (!url) return toast.error("Image URL is required");
+    if (!/^https?:\/\//i.test(url))
+      return toast.error("URL must start with http:// or https://");
+
+    const width = Math.max(1, Math.min(1200, parseInt(imgWidth) || 600));
+    const alt = imgAlt.trim().replace(/"/g, "&quot;");
+    const containerAlign =
+      imgAlign === "left" ? "left" : imgAlign === "right" ? "right" : "center";
+
+    const imgTag = `<img src="${url}" alt="${alt}" width="${width}" style="display:block;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />`;
+
+    const linked = imgLink.trim()
+      ? `<a href="${imgLink.trim()}" target="_blank" style="text-decoration:none;">${imgTag}</a>`
+      : imgTag;
+
+    const snippet = `\n<div style="text-align:${containerAlign};margin:16px 0;">\n  ${linked}\n</div>\n`;
+
+    const textarea = contentRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart ?? content.length;
+      const end = textarea.selectionEnd ?? content.length;
+      const next = content.slice(0, start) + snippet + content.slice(end);
+      setContent(next);
+      requestAnimationFrame(() => {
+        textarea.focus();
+        const caret = start + snippet.length;
+        textarea.setSelectionRange(caret, caret);
+      });
+    } else {
+      setContent((prev) => prev + snippet);
+    }
+
+    setImageDialogOpen(false);
+    toast.success("Image inserted");
   };
 
   const generateContent = async () => {
@@ -521,6 +578,16 @@ export default function EmailCampaigns() {
                           type="button"
                           variant="outline"
                           size="sm"
+                          onClick={openImageDialog}
+                          className="gap-1.5"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          Insert Image
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
                           onClick={openAiWriter}
                           className="gap-1.5 text-primary border-primary/30 hover:bg-primary/5"
                         >
@@ -541,6 +608,7 @@ export default function EmailCampaigns() {
                     </div>
 
                     <Textarea
+                      ref={contentRef}
                       placeholder={"Write your HTML email content here...\n\nTip: Type  /  to open the AI writing assistant"}
                       value={content}
                       onChange={handleContentChange}
@@ -1109,6 +1177,113 @@ export default function EmailCampaigns() {
           </div>
         </div>
       </div>
+
+      {/* Insert Image Dialog */}
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent className="max-w-md w-full">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold flex items-center gap-2">
+              <ImageIcon className="w-4 h-4" />
+              Insert Image
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Use a public image URL. Email clients block inline/uploaded images — host images on your site (e.g. hometoolshub.com) or a CDN, then paste the link here.
+            </p>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-2">
+            <div>
+              <label className="text-xs font-medium mb-1.5 block">
+                Image URL <span className="text-destructive">*</span>
+              </label>
+              <Input
+                placeholder="https://hometoolshub.com/images/product.jpg"
+                value={imgUrl}
+                onChange={(e) => setImgUrl(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            {imgUrl && /^https?:\/\//i.test(imgUrl) && (
+              <div className="border border-border rounded-md p-2 bg-muted/20">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">Preview</p>
+                <img
+                  src={imgUrl}
+                  alt="Preview"
+                  className="max-h-40 max-w-full mx-auto rounded"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-medium mb-1.5 block">
+                Alt text <span className="text-muted-foreground font-normal">(for accessibility)</span>
+              </label>
+              <Input
+                placeholder="Product photo"
+                value={imgAlt}
+                onChange={(e) => setImgAlt(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium mb-1.5 block">
+                Click-through link <span className="text-muted-foreground font-normal">(optional)</span>
+              </label>
+              <Input
+                placeholder="https://hometoolshub.com/products"
+                value={imgLink}
+                onChange={(e) => setImgLink(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium mb-1.5 block">Width (px)</label>
+                <Input
+                  type="number"
+                  min={50}
+                  max={1200}
+                  value={imgWidth}
+                  onChange={(e) => setImgWidth(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1.5 block">Alignment</label>
+                <div className="flex gap-1">
+                  {(["left", "center", "right"] as const).map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setImgAlign(a)}
+                      className={cn(
+                        "flex-1 text-xs py-1.5 rounded border capitalize transition-colors",
+                        imgAlign === a
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border hover:bg-accent"
+                      )}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-border mt-2">
+            <Button variant="ghost" size="sm" onClick={() => setImageDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={insertImageTag} disabled={!imgUrl.trim()}>
+              Insert
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Contact Picker Dialog */}
       <Dialog open={contactPickerOpen} onOpenChange={setContactPickerOpen}>
